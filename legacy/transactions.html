@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transactions | Agency CRM</title>
+    <meta name="description" content="Transaction Ledger">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar fluid-background">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">K</div>
+                    <span class="sidebar-logo-text">Kida CRM</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a href="index.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        Dashboard
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a href="clients.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Clients
+                    </a>
+                    <a href="projects.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Projects
+                    </a>
+                    <a href="people.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        People
+                    </a>
+                    <a href="transactions.html" class="nav-item active">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        Transactions
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <a href="reports.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Reports
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header tapestry-header">
+                <h1 class="page-title">Transactions</h1>
+                <div class="page-actions">
+                    <button class="btn btn-primary" onclick="openAddModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add Transaction
+                    </button>
+                </div>
+            </header>
+
+            <div class="page-body">
+                <!-- Month Picker -->
+                <div class="card mb-md">
+                    <div class="card-body" style="padding: 16px 24px;">
+                        <div class="month-picker-container">
+                            <button class="btn btn-sm btn-ghost" onclick="changeMonth(-1)" id="prevMonthBtn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                </svg>
+                            </button>
+                            <div class="month-tabs" id="monthTabs">
+                                <!-- Populated by JS -->
+                            </div>
+                            <button class="btn btn-sm btn-ghost" onclick="changeMonth(1)" id="nextMonthBtn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card mb-lg">
+                    <div class="card-body">
+                        <div class="form-row" style="grid-template-columns: repeat(3, 1fr);">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label class="form-label">Type</label>
+                                <select id="typeFilter" class="form-select">
+                                    <option value="">All Types</option>
+                                    <option value="Revenue">Revenue</option>
+                                    <option value="Dev Payment">Dev Payment</option>
+                                    <option value="Tool Cost">Tool Cost</option>
+                                    <option value="Ads">Ads</option>
+                                    <option value="Misc Expense">Misc Expense</option>
+                                    <option value="Salary">Salary</option>
+                                    <option value="Founder Withdrawal">Founder Withdrawal</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label class="form-label">Account</label>
+                                <select id="accountFilter" class="form-select">
+                                    <option value="">All Accounts</option>
+                                    <option value="Upwork">Upwork</option>
+                                    <option value="Bank">Bank</option>
+                                    <option value="Wise">Wise</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label class="form-label">Status</label>
+                                <select id="statusFilter" class="form-select">
+                                    <option value="">All Status</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Pending">Pending</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Account</th>
+                                <th>Project</th>
+                                <th>Person</th>
+                                <th>Description</th>
+                                <th>Status</th>
+                                <th class="text-right">Amount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTable">
+                            <!-- Quick Add Row (Airtable-style) -->
+                            <tr class="quick-add-row" id="quickAddRow">
+                                <td>
+                                    <input type="date" id="quickDate" class="inline-input" placeholder="Date">
+                                </td>
+                                <td>
+                                    <select id="quickType" class="inline-select">
+                                        <option value="">Type...</option>
+                                        <option value="Revenue">Revenue</option>
+                                        <option value="Dev Payment">Dev Payment</option>
+                                        <option value="Tool Cost">Tool Cost</option>
+                                        <option value="Ads">Ads</option>
+                                        <option value="Misc Expense">Misc Expense</option>
+                                        <option value="Salary">Salary</option>
+                                        <option value="Founder Withdrawal">Founder Withdrawal</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select id="quickAccount" class="inline-select">
+                                        <option value="">Account...</option>
+                                        <option value="Upwork">Upwork</option>
+                                        <option value="Bank">Bank</option>
+                                        <option value="Wise">Wise</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select id="quickProject" class="inline-select">
+                                        <option value="">No project</option>
+                                        <!-- Populated by JS -->
+                                    </select>
+                                </td>
+                                <td>
+                                    <select id="quickPerson" class="inline-select">
+                                        <option value="">No person</option>
+                                        <!-- Populated by JS -->
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="text" id="quickDescription" class="inline-input"
+                                        placeholder="Description...">
+                                </td>
+                                <td>
+                                    <select id="quickStatus" class="inline-select">
+                                        <option value="Paid">Paid</option>
+                                        <option value="Pending">Pending</option>
+                                    </select>
+                                </td>
+                                <td class="text-right">
+                                    <div style="position: relative; display: inline-block; width: 100%;">
+                                        <span
+                                            style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--color-text-secondary); pointer-events: none; font-size: 14px;">$</span>
+                                        <input type="number" id="quickAmount" class="inline-input"
+                                            style="padding-left: 20px; text-align: right;" placeholder="0.00"
+                                            step="0.01" min="0">
+                                    </div>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" onclick="saveQuickTransaction()"
+                                        title="Save (Enter)">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                            <!-- Existing transactions populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Controls -->
+                <div id="paginationControls" class="pagination-wrapper"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="transactionModal">
+        <div class="modal" style="max-width: 560px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Add Transaction</h3>
+                <button class="modal-close" onclick="closeModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="transactionForm">
+                    <input type="hidden" name="id" id="transactionId">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Date *</label>
+                            <input type="date" name="date" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Amount *</label>
+                            <div style="position: relative;">
+                                <span
+                                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-text-secondary); pointer-events: none;">$</span>
+                                <input type="number" name="amount" class="form-input" style="padding-left: 28px;"
+                                    step="0.01" min="0" required placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Type *</label>
+                            <select name="type" id="transactionType" class="form-select" required
+                                onchange="handleTypeChange()">
+                                <option value="Revenue">Revenue</option>
+                                <option value="Dev Payment">Dev Payment</option>
+                                <option value="Tool Cost">Tool Cost</option>
+                                <option value="Ads">Ads</option>
+                                <option value="Misc Expense">Misc Expense</option>
+                                <option value="Salary">Salary</option>
+                                <option value="Founder Withdrawal">Founder Withdrawal</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Account *</label>
+                            <select name="account" class="form-select" required>
+                                <option value="Upwork">Upwork</option>
+                                <option value="Bank">Bank</option>
+                                <option value="Wise">Wise</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" id="projectGroup">
+                        <label class="form-label">Project <span class="text-muted">(Optional)</span></label>
+                        <select name="project_id" id="projectSelect" class="form-select"
+                            onchange="handleProjectSelect()">
+                            <option value="">No project</option>
+                            <option value="__ADD_NEW__" style="color: var(--color-accent); font-weight: 600;">+ Add New
+                                Project</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="personGroup" style="display: none;">
+                        <label class="form-label">Person</label>
+                        <select name="person_id" id="personSelect" class="form-select">
+                            <option value="">Select person...</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Payment Status</label>
+                            <select name="payment_status" class="form-select">
+                                <option value="Paid">Paid</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-textarea" rows="2"
+                            placeholder="Optional notes..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveTransaction()">Save Transaction</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/transactions.js"></script>
+</body>
+
+</html>

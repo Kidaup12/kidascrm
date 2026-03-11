@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment variables (add your .env files here)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Utility/import scripts (contain API keys - keep local only)
+import_excel.mjs
+cleanup_test_data.mjs
+clear_2026_q1.mjs
+run_fast_test.mjs
+read_excel.mjs
+
+# Excel import file (real data - keep local)
+crm import.xlsx

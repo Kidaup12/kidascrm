@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>People | Agency CRM</title>
+    <meta name="description" content="Team Management">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar fluid-background">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">K</div>
+                    <span class="sidebar-logo-text">Kida CRM</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a href="index.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        Dashboard
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a href="clients.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Clients
+                    </a>
+                    <a href="projects.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Projects
+                    </a>
+                    <a href="people.html" class="nav-item active">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        People
+                    </a>
+                    <a href="transactions.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        Transactions
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <a href="reports.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Reports
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header tapestry-header">
+                <h1 class="page-title">People</h1>
+                <div class="page-actions">
+                    <select id="roleFilter" class="form-select" style="width: auto;">
+                        <option value="">All Roles</option>
+                        <option value="Founder">Founders</option>
+                        <option value="Contractor">Contractors</option>
+                        <option value="Fixed Salary Employee">Employees</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="openAddModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add Person
+                    </button>
+                </div>
+            </header>
+
+            <div class="page-body">
+                <!-- Summary Cards -->
+                <div class="kpi-grid" style="margin-bottom: 24px;">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Team Members</div>
+                        <div class="kpi-value" id="totalPeople">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Paid (All Time)</div>
+                        <div class="kpi-value text-success" id="totalPaid">$0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Pending Payments</div>
+                        <div class="kpi-value text-warning" id="totalPending">$0</div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th>Payment Type</th>
+                                <th>Rate</th>
+                                <th class="text-right">Total Paid</th>
+                                <th class="text-right">Pending</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="peopleTable">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="personModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Add Person</h3>
+                <button class="modal-close" onclick="closeModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="personForm">
+                    <input type="hidden" name="id" id="personId">
+                    <div class="form-group">
+                        <label class="form-label">Name *</label>
+                        <input type="text" name="name" class="form-input" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Role</label>
+                            <select name="role" class="form-select">
+                                <option value="Contractor">Contractor</option>
+                                <option value="Fixed Salary Employee">Fixed Salary Employee</option>
+                                <option value="Founder">Founder</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Payment Type</label>
+                            <select name="payment_type" class="form-select">
+                                <option value="Per project">Per project</option>
+                                <option value="Hourly">Hourly</option>
+                                <option value="Monthly salary">Monthly salary</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Standard Rate</label>
+                            <input type="number" name="standard_rate" class="form-input" step="0.01" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Status</label>
+                            <select name="is_active" class="form-select">
+                                <option value="true">Active</option>
+                                <option value="false">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="savePerson()">Save Person</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Person Modal -->
+    <div class="modal-overlay" id="viewPersonModal">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="viewPersonName">Person Details</h3>
+                <button class="modal-close" onclick="closeViewModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="viewPersonContent">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/people.js"></script>
+</body>
+
+</html>

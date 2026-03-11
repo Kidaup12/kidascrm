@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports | Agency CRM</title>
+    <meta name="description" content="Financial Reports">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar fluid-background">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">K</div>
+                    <span class="sidebar-logo-text">Kida CRM</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a href="index.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        Dashboard
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a href="clients.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Clients
+                    </a>
+                    <a href="projects.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Projects
+                    </a>
+                    <a href="people.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        People
+                    </a>
+                    <a href="transactions.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        Transactions
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <a href="reports.html" class="nav-item active">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Reports
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header tapestry-header">
+                <h1 class="page-title">Financial Reports</h1>
+                <div class="page-actions">
+                    <select id="yearFilter" class="form-select" style="width: auto;">
+                        <!-- Populated by JS -->
+                    </select>
+                    <button class="btn btn-secondary" onclick="exportCSV()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </header>
+
+            <div class="page-body">
+                <!-- Annual Summary -->
+                <div class="kpi-grid" style="margin-bottom: 24px;">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Annual Revenue</div>
+                        <div class="kpi-value" id="annualRevenue">$0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Annual Profit</div>
+                        <div class="kpi-value text-success" id="annualProfit">$0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Expenses</div>
+                        <div class="kpi-value" id="totalExpenses">$0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Profit Margin</div>
+                        <div class="kpi-value" id="profitMargin">0%</div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid-2" style="margin-bottom: 24px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Monthly Revenue vs Profit</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="monthlyChart" height="250"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Revenue by Platform</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="platformChart" height="250"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Summary Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Monthly Summary</h3>
+                    </div>
+                    <div class="card-body">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th class="text-right">Revenue</th>
+                                    <th class="text-right">Dev Payments</th>
+                                    <th class="text-right">Tools</th>
+                                    <th class="text-right">Other Expenses</th>
+                                    <th class="text-right">Withdrawals</th>
+                                    <th class="text-right">Profit</th>
+                                    <th class="text-right">Margin</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthlySummaryTable">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Top Clients & Projects -->
+                <div class="grid-2" style="margin-top: 24px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Top Clients by Revenue</h3>
+                        </div>
+                        <div class="card-body" id="topClients">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Top Projects by Profit</h3>
+                        </div>
+                        <div class="card-body" id="topProjects">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/reports.js"></script>
+</body>
+
+</html>

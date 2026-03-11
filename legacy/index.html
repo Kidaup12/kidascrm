@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Agency CRM</title>
+    <meta name="description" content="Agency CRM Financial Dashboard">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar fluid-background">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">K</div>
+                    <span class="sidebar-logo-text">Kida CRM</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a href="index.html" class="nav-item active">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        Dashboard
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a href="clients.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Clients
+                    </a>
+                    <a href="projects.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Projects
+                    </a>
+                    <a href="people.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        People
+                    </a>
+                    <a href="transactions.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        Transactions
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <a href="reports.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Reports
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="page-header tapestry-header">
+                <h1 class="page-title">Dashboard</h1>
+                <div class="page-actions">
+                    <select id="periodSelector" class="form-select" style="width: auto;">
+                        <option value="week">This Week</option>
+                        <option value="month" selected>This Month</option>
+                        <option value="year">This Year</option>
+                        <option value="all">All Time</option>
+                    </select>
+                </div>
+            </header>
+
+            <!-- Body -->
+            <div class="page-body">
+                <!-- KPI Cards -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <span class="kpi-label">Revenue</span>
+                            <div class="kpi-icon revenue">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="kpi-value" id="kpiRevenue">$0</div>
+                        <div class="kpi-change positive" id="kpiRevenueChange">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                            </svg>
+                            <span>+0%</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <span class="kpi-label">Profit</span>
+                            <div class="kpi-icon profit">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                                    <polyline points="17 6 23 6 23 12" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="kpi-value" id="kpiProfit">$0</div>
+                        <div class="kpi-change positive" id="kpiProfitChange">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                            </svg>
+                            <span>+0%</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <span class="kpi-label">Expenses</span>
+                            <div class="kpi-icon expense">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="8" x2="12" y2="16" />
+                                    <line x1="8" y1="12" x2="16" y2="12" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="kpi-value" id="kpiExpenses">$0</div>
+                        <div class="kpi-change" id="kpiExpensesChange">
+                            <span>0% of revenue</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-card-header">
+                            <span class="kpi-label">Withdrawals</span>
+                            <div class="kpi-icon withdrawal">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                                    <line x1="1" y1="10" x2="23" y2="10" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="kpi-value" id="kpiWithdrawals">$0</div>
+                        <div class="kpi-change" id="kpiWithdrawalsChange">
+                            <span>Founder distributions</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="chart-grid">
+                    <!-- Expense Breakdown Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Expense Breakdown</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="expenseChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Revenue Trend Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Revenue & Profit Trend</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="trendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Widgets -->
+                <div class="summary-grid">
+                    <!-- Money Owed Widget -->
+                    <div class="summary-card">
+                        <div class="summary-card-header">
+                            <h4 class="card-title">Money Owed</h4>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-item-label">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00A876"
+                                    stroke-width="2">
+                                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                                </svg>
+                                Clients owe us
+                            </span>
+                            <span class="summary-item-value positive" id="clientsOweUs">$0</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-item-label">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D32F2F"
+                                    stroke-width="2">
+                                    <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+                                </svg>
+                                We owe contractors
+                            </span>
+                            <span class="summary-item-value negative" id="weOweContractors">$0</span>
+                        </div>
+                    </div>
+
+                    <!-- Founder Balances Widget -->
+                    <div class="summary-card">
+                        <div class="summary-card-header">
+                            <h4 class="card-title">Founder Balances</h4>
+                        </div>
+                        <div class="founder-widget" id="founderBalances">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Recent Transactions -->
+                    <div class="summary-card">
+                        <div class="summary-card-header">
+                            <h4 class="card-title">Recent Transactions</h4>
+                            <a href="transactions.html" class="btn btn-sm btn-ghost">View All</a>
+                        </div>
+                        <div id="recentTransactions">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/supabase.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+
+</html>

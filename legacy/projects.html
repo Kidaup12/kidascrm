@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects | Agency CRM</title>
+    <meta name="description" content="Project Management">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar fluid-background">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">K</div>
+                    <span class="sidebar-logo-text">Kida CRM</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a href="index.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        Dashboard
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a href="clients.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Clients
+                    </a>
+                    <a href="projects.html" class="nav-item active">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Projects
+                    </a>
+                    <a href="people.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        People
+                    </a>
+                    <a href="transactions.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        Transactions
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <a href="reports.html" class="nav-item">
+                        <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        Reports
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header tapestry-header">
+                <h1 class="page-title">Projects</h1>
+                <div class="page-actions">
+                    <select id="statusFilter" class="form-select" style="width: auto;">
+                        <option value="">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Completed">Completed</option>
+                        <option value="On Hold">On Hold</option>
+                    </select>
+                    <select id="platformFilter" class="form-select" style="width: auto;">
+                        <option value="">All Platforms</option>
+                        <option value="Upwork">Upwork</option>
+                        <option value="Bank">Bank</option>
+                        <option value="Wise">Wise</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="openAddModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add Project
+                    </button>
+                </div>
+            </header>
+
+            <div class="page-body">
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Client</th>
+                                <th>Status</th>
+                                <th>Platform</th>
+                                <th class="text-right">Agreed</th>
+                                <th class="text-right">Received</th>
+                                <th class="text-right">Costs</th>
+                                <th class="text-right">Profit</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="projectsTable">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="projectModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Add Project</h3>
+                <button class="modal-close" onclick="closeModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="projectForm">
+                    <input type="hidden" name="id" id="projectId">
+                    <div class="form-group">
+                        <label class="form-label">Project Name *</label>
+                        <input type="text" name="project_name" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Client *</label>
+                        <select name="client_id" id="clientSelect" class="form-select" required>
+                            <option value="">Select client...</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Platform</label>
+                            <select name="platform" class="form-select">
+                                <option value="Upwork">Upwork</option>
+                                <option value="Bank">Bank</option>
+                                <option value="Wise">Wise</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Status</label>
+                            <select name="status" class="form-select">
+                                <option value="Active">Active</option>
+                                <option value="Completed">Completed</option>
+                                <option value="On Hold">On Hold</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Total Agreed Amount</label>
+                            <input type="number" name="total_agreed_amount" class="form-input" step="0.01" min="0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label class="form-label">Notes</label>
+                            <textarea name="notes" class="form-textarea" rows="2"
+                                placeholder="Additional notes..."></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveProject()">Save Project</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Project Modal (with Developer Payments) -->
+    <div class="modal-overlay" id="viewProjectModal">
+        <div class="modal" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="viewProjectName">Project Details</h3>
+                <button class="modal-close" onclick="closeViewModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="viewProjectContent">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Assign Developer Modal -->
+    <div class="modal-overlay" id="assignDevModal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Assign Developer</h3>
+                <button class="modal-close" onclick="closeAssignModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="assignDevForm">
+                    <input type="hidden" name="project_id" id="assignProjectId">
+                    <div class="form-group">
+                        <label class="form-label">Developer *</label>
+                        <select name="person_id" id="developerSelect" class="form-select" required>
+                            <option value="">Select developer...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Agreed Amount *</label>
+                        <input type="number" name="agreed_amount" class="form-input" step="0.01" min="0" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAssignModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="assignDeveloper()">Assign</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/projects.js"></script>
+</body>
+
+</html>
