@@ -3,11 +3,13 @@ import { db } from '../lib/supabase';
 import { formatCurrency, formatDateShort, getRoleBadge, getStatusBadge, getTypeBadge } from '../lib/utils';
 import Badge from '../components/Badge';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function People() {
     // Data State
     const [peopleData, setPeopleData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Filters State
     const [roleFilter, setRoleFilter] = useState('');
@@ -20,6 +22,8 @@ export default function People() {
     // View Modal State
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [viewData, setViewData] = useState({ person: null, transactions: [], totalPaid: 0, totalPending: 0 });
+    const [contractorOwed, setContractorOwed] = useState([]);
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
     useEffect(() => {
         loadPeople();
@@ -28,11 +32,14 @@ export default function People() {
     const loadPeople = async () => {
         setLoading(true);
         try {
-            const data = await db.people.getWithFinancials();
+            const [data, owedData] = await Promise.all([
+                db.people.getWithFinancials(),
+                db.contractorOwed.getOwedByContractor()
+            ]);
             setPeopleData(data);
+            setContractorOwed(owedData);
         } catch (error) {
             console.error('Error loading people:', error);
-            // alert('Failed to load people data');
         } finally {
             setLoading(false);
         }
@@ -41,6 +48,14 @@ export default function People() {
     let displayPeople = [...peopleData];
     if (roleFilter) {
         displayPeople = displayPeople.filter(p => p.role === roleFilter);
+    }
+
+    if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        displayPeople = displayPeople.filter(p => 
+            p.name?.toLowerCase().includes(lowerTerm) || 
+            p.role?.toLowerCase().includes(lowerTerm)
+        );
     }
 
     // Summary calculations
@@ -105,17 +120,21 @@ export default function People() {
         }
     };
 
-    const handleDeletePerson = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this person?')) {
-            return;
-        }
+    const handleDeletePerson = (id) => {
+        setConfirmDeleteId(id);
+    };
+
+    const confirmDeletePerson = async () => {
+        if (!confirmDeleteId) return;
 
         try {
-            await db.people.delete(id);
+            await db.people.delete(confirmDeleteId);
             loadPeople();
         } catch (error) {
             console.error('Error deleting person:', error);
             alert(error.message || 'Failed to delete person');
+        } finally {
+            setConfirmDeleteId(null);
         }
     };
 
@@ -123,11 +142,27 @@ export default function People() {
         try {
             const person = await db.people.getById(id);
             const transactions = await db.transactions.getByPerson(id);
+            const assignedProjects = await db.projectDevelopers.getByPerson(id);
 
-            const totalPaid = transactions.filter(t => t.payment_status === 'Paid').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+            const totalPaid = transactions.filter(t => t.payment_status === 'Completed').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
             const totalPending = transactions.filter(t => t.payment_status === 'Pending').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+            
+            // Build projects overview
+            const projectsOverview = assignedProjects.map(ap => {
+                const paidForThisProject = transactions
+                    .filter(t => t.project_id === ap.project_id && t.payment_status === 'Completed')
+                    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+                
+                return {
+                    id: ap.project_id,
+                    name: ap.projects?.project_name || 'Unknown',
+                    agreed: parseFloat(ap.agreed_amount || 0),
+                    paid: paidForThisProject,
+                    remaining: parseFloat(ap.agreed_amount || 0) - paidForThisProject
+                };
+            });
 
-            setViewData({ person, transactions, totalPaid, totalPending });
+            setViewData({ person, transactions, totalPaid, totalPending, projectsOverview });
             setIsViewModalOpen(true);
         } catch (error) {
             console.error('Error viewing person:', error);
@@ -142,8 +177,16 @@ export default function People() {
     return (
         <>
             <header className="page-header tapestry-header">
-                <h1 className="page-title">People</h1>
+                <h1 className="page-title">People & Contractors</h1>
                 <div className="page-actions">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="form-input"
+                        placeholder="Search people..."
+                        style={{ width: '200px' }}
+                    />
                     <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
                         <option value="">All Roles</option>
                         <option value="Founder">Founders</option>
@@ -263,6 +306,74 @@ export default function People() {
                 </div>
             </div>
 
+            {/* Contractor Owed Section */}
+            {contractorOwed.length > 0 && (() => {
+                // Group by contractor
+                const byContractor = {};
+                contractorOwed.forEach(proj => {
+                    const name = proj.people?.name || 'Unknown';
+                    if (!byContractor[name]) byContractor[name] = { projects: [], totalOwed: 0, totalAgreed: 0, totalPaid: 0 };
+                    byContractor[name].projects.push(proj);
+                    byContractor[name].totalOwed += proj.owed;
+                    byContractor[name].totalAgreed += proj.agreed;
+                    byContractor[name].totalPaid += proj.paid;
+                });
+                const grandOwed = contractorOwed.reduce((s, p) => s + p.owed, 0);
+                return (
+                    <div className="page-body" style={{ paddingTop: 0 }}>
+                        <div className="card">
+                            <div className="card-header">
+                                <h3 className="card-title">Contractor Owed Overview</h3>
+                                <div className="text-error font-semibold">{formatCurrency(grandOwed)} total outstanding</div>
+                            </div>
+                            <div className="card-body" style={{ padding: 0 }}>
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Contractor</th>
+                                            <th>Project</th>
+                                            <th className="text-right">Agreed</th>
+                                            <th className="text-right">Paid</th>
+                                            <th className="text-right">Still Owed</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(byContractor).map(([name, cData]) => (
+                                            <>
+                                                {cData.projects.map((proj, idx) => (
+                                                    <tr key={proj.id} style={proj.owed > 0 ? { background: 'rgba(255,90,90,0.04)' } : {}}>
+                                                        {idx === 0 && (
+                                                            <td rowSpan={cData.projects.length} className="font-medium" style={{ verticalAlign: 'top', paddingTop: '14px', borderRight: '1px solid var(--color-border)' }}>
+                                                                {name}
+                                                                <div className="text-sm text-muted mt-xs">{cData.projects.length} project{cData.projects.length !== 1 ? 's' : ''}</div>
+                                                            </td>
+                                                        )}
+                                                        <td className="text-muted" style={{ fontSize: '13px' }}>{proj.project_name}</td>
+                                                        <td className="text-right">{formatCurrency(proj.agreed)}</td>
+                                                        <td className="text-right text-success">{formatCurrency(proj.paid)}</td>
+                                                        <td className="text-right font-semibold" style={{ color: proj.owed > 0 ? 'var(--color-error)' : 'var(--color-success)' }}>
+                                                            {proj.owed > 0 ? formatCurrency(proj.owed) : '✓ Settled'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                <tr style={{ background: 'var(--color-bg-tertiary)', borderTop: '2px solid var(--color-border)' }}>
+                                                    <td colSpan={2} className="font-semibold text-sm text-muted">Subtotal — {name}</td>
+                                                    <td className="text-right font-medium">{formatCurrency(cData.totalAgreed)}</td>
+                                                    <td className="text-right font-medium text-success">{formatCurrency(cData.totalPaid)}</td>
+                                                    <td className="text-right font-semibold" style={{ color: cData.totalOwed > 0 ? 'var(--color-error)' : 'var(--color-success)' }}>
+                                                        {formatCurrency(cData.totalOwed)}
+                                                    </td>
+                                                </tr>
+                                            </>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* Add/Edit Modal */}
             <Modal
                 isOpen={isAddEditModalOpen}
@@ -354,6 +465,36 @@ export default function People() {
                             </div>
                         </div>
 
+                        <h4 style={{ marginBottom: '12px' }}>Projects Overview</h4>
+                        {viewData.projectsOverview && viewData.projectsOverview.length > 0 ? (
+                            <div className="table-container mb-lg">
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Project</th>
+                                            <th className="text-right">Agreed</th>
+                                            <th className="text-right">Paid</th>
+                                            <th className="text-right">Remaining</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {viewData.projectsOverview.map(p => (
+                                            <tr key={p.id}>
+                                                <td className="font-medium">{p.name}</td>
+                                                <td className="text-right">{formatCurrency(p.agreed)}</td>
+                                                <td className="text-right text-success">{formatCurrency(p.paid)}</td>
+                                                <td className={`text-right ${p.remaining > 0 ? 'text-warning font-medium' : 'text-muted'}`}>
+                                                    {formatCurrency(p.remaining)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-muted mb-lg">No assigned projects yet.</p>
+                        )}
+
                         <h4 style={{ marginBottom: '12px' }}>Payment History</h4>
                         {viewData.transactions && viewData.transactions.length > 0 ? (
                             <div className="table-container">
@@ -386,6 +527,14 @@ export default function People() {
                     </>
                 )}
             </Modal>
+
+            <ConfirmModal
+                isOpen={!!confirmDeleteId}
+                onClose={() => setConfirmDeleteId(null)}
+                onConfirm={confirmDeletePerson}
+                title="Delete Person"
+                message="Are you sure you want to delete this person?"
+            />
         </>
     );
 }

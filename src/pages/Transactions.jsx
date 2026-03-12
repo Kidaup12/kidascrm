@@ -4,6 +4,71 @@ import { db } from '../lib/supabase';
 import { formatCurrency, formatDateShort, getTypeBadge, getPlatformBadge, getStatusBadge } from '../lib/utils';
 import Badge from '../components/Badge';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
+
+const ProjectSearchSelect = ({ value, onChange, projects, className }) => {
+    const [projectSearchTerm, setProjectSearchTerm] = useState('');
+    const [isOpen, setIsOpen] = useState(false);
+
+    const selectedName = value === '__ADD_NEW__' ? '+ Add New Project' : projects.find(p => p.id === value)?.project_name || '';
+
+    useEffect(() => {
+        if (!isOpen) setProjectSearchTerm(selectedName);
+    }, [isOpen, selectedName]);
+
+    const filtered = projects.filter(p => p.project_name?.toLowerCase().includes(projectSearchTerm.toLowerCase()));
+
+    return (
+        <div style={{ position: 'relative' }} className={className}>
+            <input
+                type="text"
+                className={className || "form-input"}
+                placeholder={isOpen ? "Type to search..." : "Select project..."}
+                value={isOpen ? projectSearchTerm : selectedName}
+                onChange={e => {
+                    setProjectSearchTerm(e.target.value);
+                    if (!isOpen) setIsOpen(true);
+                    if (!e.target.value) onChange('');
+                }}
+                onFocus={() => { setIsOpen(true); setProjectSearchTerm(''); }}
+                onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+            />
+            <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--color-text-secondary)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            {isOpen && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: '250px', overflowY: 'auto', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '4px', zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', textAlign: 'left', marginTop: '4px' }}>
+                    <div 
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+                        onMouseDown={e => { e.preventDefault(); onChange(''); setIsOpen(false); }}
+                    >
+                        <span className="text-muted">No project</span>
+                    </div>
+                    <div 
+                        style={{ padding: '8px 12px', cursor: 'pointer', color: 'var(--color-accent)', fontWeight: 600, borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+                        onMouseDown={e => { e.preventDefault(); onChange('__ADD_NEW__'); setIsOpen(false); }}
+                    >
+                        + Add New Project
+                    </div>
+                    {filtered.map(p => (
+                        <div 
+                            key={p.id}
+                            style={{ padding: '8px 12px', cursor: 'pointer', background: p.id === value ? 'var(--color-primary-light)' : 'var(--color-bg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            onMouseDown={e => { e.preventDefault(); onChange(p.id); setIsOpen(false); }}
+                            onMouseEnter={e => e.currentTarget.style.filter = 'brightness(0.95)'}
+                            onMouseLeave={e => e.currentTarget.style.filter = 'none'}
+                        >
+                            {p.project_name}
+                        </div>
+                    ))}
+                    {filtered.length === 0 && (
+                        <div style={{ padding: '8px 12px', color: 'var(--color-text-secondary)', background: 'var(--color-bg)' }}>No matches found</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function Transactions() {
     const searchParams = useSearchParams();
@@ -18,6 +83,7 @@ export default function Transactions() {
     const [typeFilter, setTypeFilter] = useState('');
     const [accountFilter, setAccountFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Month Picker State
     const [selectedMonth, setSelectedMonth] = useState('');
@@ -39,8 +105,11 @@ export default function Transactions() {
         person_id: '',
         description: '',
         payment_status: 'Completed',
-        amount: ''
+        amount: '',
+        currency: 'USD',
+        billing_type: 'One-off'
     });
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
     // Quick Add State
     const [quickAdd, setQuickAdd] = useState({
@@ -51,7 +120,9 @@ export default function Transactions() {
         person_id: '',
         description: '',
         payment_status: 'Completed',
-        amount: ''
+        amount: '',
+        billing_type: 'One-off',
+        currency: 'USD'
     });
 
     useEffect(() => {
@@ -116,6 +187,26 @@ export default function Transactions() {
         }
     }, [selectedMonth, typeFilter, accountFilter, statusFilter]);
 
+    // Filtering logic
+    const filteredData = useMemo(() => {
+        let items = [...transactionsData];
+        if (typeFilter) items = items.filter(t => t.type === typeFilter);
+        if (accountFilter) items = items.filter(t => t.account === accountFilter);
+        if (statusFilter) items = items.filter(t => t.payment_status === statusFilter);
+        
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            items = items.filter(t => 
+                t.description?.toLowerCase().includes(lowerTerm) ||
+                t.projects?.project_name?.toLowerCase().includes(lowerTerm) ||
+                t.people?.name?.toLowerCase().includes(lowerTerm) ||
+                t.amount?.toString().includes(lowerTerm)
+            );
+        }
+        
+        return items;
+    }, [transactionsData, typeFilter, accountFilter, statusFilter, searchTerm]);
+
     const loadTransactions = async () => {
         setLoading(true);
         try {
@@ -163,11 +254,11 @@ export default function Transactions() {
     };
 
     // Pagination
-    const totalItems = transactionsData.length;
+    const totalItems = filteredData.length;
     const totalPages = Math.ceil(totalItems / pageSize);
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = Math.min(startIndex + pageSize, totalItems);
-    const paginatedData = transactionsData.slice(startIndex, endIndex);
+    const paginatedData = filteredData.slice(startIndex, endIndex);
 
     // Form Change Handlers
     const handleFormChange = (e) => {
@@ -242,13 +333,10 @@ export default function Transactions() {
         setCurrentTransaction(null);
         setFormData({
             date: new Date().toISOString().split('T')[0],
-            type: 'Revenue',
-            account: 'Upwork',
-            project_id: '',
-            person_id: '',
-            description: '',
-            payment_status: 'Completed',
-            amount: ''
+            type: 'Revenue', account: 'Upwork',
+            project_id: '', person_id: '', description: '',
+            payment_status: 'Completed', amount: '',
+            currency: 'USD', billing_type: 'One-off'
         });
         setIsAddEditModalOpen(true);
     };
@@ -262,8 +350,10 @@ export default function Transactions() {
             project_id: tx.project_id || '',
             person_id: tx.person_id || '',
             description: tx.description || '',
-            payment_status: tx.payment_status || 'Paid',
-            amount: tx.amount || ''
+            payment_status: tx.payment_status || 'Completed',
+            amount: tx.amount || '',
+            currency: tx.currency || 'USD',
+            billing_type: tx.billing_type || 'One-off'
         });
         setIsAddEditModalOpen(true);
     };
@@ -287,7 +377,14 @@ export default function Transactions() {
         const payload = {
             ...dataToSave,
             project_id: dataToSave.project_id || null,
-            person_id: dataToSave.person_id || null
+            person_id: dataToSave.person_id || null,
+            // KES→USD conversion
+            currency: dataToSave.currency || 'USD',
+            original_amount: dataToSave.currency === 'KES' ? parseFloat(String(dataToSave.amount).replace(/[$,]/g, '')) : null,
+            amount: dataToSave.currency === 'KES'
+                ? +(parseFloat(String(dataToSave.amount).replace(/[$,]/g, '')) / 128).toFixed(2)
+                : parseFloat(String(dataToSave.amount).replace(/[$,]/g, '')),
+            billing_type: dataToSave.billing_type || null
         };
 
         try {
@@ -316,7 +413,7 @@ export default function Transactions() {
         const success = await handleSaveTransaction(quickAdd, true);
         if (success) {
             setQuickAdd({
-                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Completed', amount: ''
+                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Completed', amount: '', billing_type: 'One-off', currency: 'USD'
             });
             document.getElementById('quickDate')?.focus();
         }
@@ -328,18 +425,24 @@ export default function Transactions() {
             saveQuickTransaction();
         } else if (e.key === 'Escape') {
             setQuickAdd({
-                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Paid', amount: ''
+                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Paid', amount: '', billing_type: 'One-off', currency: 'USD'
             });
         }
     };
 
-    const handleDeleteTransaction = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this transaction?')) return;
+    const handleDeleteTransaction = (id) => {
+        setConfirmDeleteId(id);
+    };
+
+    const confirmDeleteTransaction = async () => {
+        if (!confirmDeleteId) return;
         try {
-            await db.transactions.delete(id);
+            await db.transactions.delete(confirmDeleteId);
             loadTransactions();
         } catch (error) {
             console.error('Error deleting transaction:', error);
+        } finally {
+            setConfirmDeleteId(null);
         }
     };
 
@@ -355,6 +458,14 @@ export default function Transactions() {
             <header className="page-header tapestry-header">
                 <h1 className="page-title">Transactions</h1>
                 <div className="page-actions">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="form-input"
+                        placeholder="Search transactions..."
+                        style={{ width: '220px' }}
+                    />
                     <button className="btn btn-primary" onClick={openAddModal}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="12" y1="5" x2="12" y2="19" />
@@ -451,16 +562,22 @@ export default function Transactions() {
                             <tr className="quick-add-row" onKeyDown={handleQuickAddKeyDown}>
                                 <td><input type="date" id="quickDate" name="date" className="inline-input" value={quickAdd.date} onChange={handleQuickAddChange} /></td>
                                 <td>
-                                    <select name="type" className="inline-select" value={quickAdd.type} onChange={handleQuickAddChange}>
-                                        <option value="">Type...</option>
-                                        <option value="Revenue">Revenue</option>
-                                        <option value="Dev Payment">Dev Payment</option>
-                                        <option value="Tool Cost">Tool Cost</option>
-                                        <option value="Ads">Ads</option>
-                                        <option value="Misc Expense">Misc Expense</option>
-                                        <option value="Salary">Salary</option>
-                                        <option value="Founder Withdrawal">Founder Withdrawal</option>
-                                    </select>
+                                    <div className="flex gap-xs items-center">
+                                        <select name="type" className="inline-select" value={quickAdd.type} onChange={handleQuickAddChange}>
+                                            <option value="">Type...</option>
+                                            <option value="Revenue">Revenue</option>
+                                            <option value="Dev Payment">Dev Payment</option>
+                                            <option value="Tool Cost">Tool Cost</option>
+                                            <option value="Ads">Ads</option>
+                                            <option value="Misc Expense">Misc Expense</option>
+                                            <option value="Salary">Salary</option>
+                                            <option value="Founder Withdrawal">Founder Withdrawal</option>
+                                        </select>
+                                        <select name="billing_type" className="inline-select" style={{width: 'auto', backgroundColor: 'var(--color-bg-secondary)', paddingRight: '8px'}} value={quickAdd.billing_type || 'One-off'} onChange={handleQuickAddChange}>
+                                            <option value="One-off">One-off</option>
+                                            <option value="Recurring">Recurring</option>
+                                        </select>
+                                    </div>
                                 </td>
                                 <td>
                                     <select name="account" className="inline-select" value={quickAdd.account} onChange={handleQuickAddChange}>
@@ -472,11 +589,12 @@ export default function Transactions() {
                                     </select>
                                 </td>
                                 <td>
-                                    <select name="project_id" className="inline-select" value={quickAdd.project_id} onChange={e => handleProjectSelect(e, 'quick')}>
-                                        <option value="">No project</option>
-                                        <option value="__ADD_NEW__" style={{ color: 'var(--color-accent)', fontWeight: 600 }}>+ Add New Project</option>
-                                        {projectsData.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
-                                    </select>
+                                    <ProjectSearchSelect 
+                                        value={quickAdd.project_id} 
+                                        onChange={(val) => handleQuickAddChange({ target: { name: 'project_id', value: val }})} 
+                                        projects={projectsData}
+                                        className="inline-input"
+                                    />
                                 </td>
                                 <td>
                                     <select name="person_id" className="inline-select" value={quickAdd.person_id} onChange={handleQuickAddChange}>
@@ -493,8 +611,16 @@ export default function Transactions() {
                                 </td>
                                 <td className="text-right">
                                     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-                                        <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)', pointerEvents: 'none', fontSize: '14px' }}>$</span>
-                                        <input type="number" name="amount" className="inline-input" style={{ paddingLeft: '20px', textAlign: 'right' }} placeholder="0.00" step="0.01" min="0" value={quickAdd.amount} onChange={handleQuickAddChange} />
+                                        <select 
+                                            name="currency" 
+                                            style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', fontSize: '12px', color: 'var(--color-text-secondary)', zIndex: 1, padding: '0 4px', cursor: 'pointer', appearance: 'none' }} 
+                                            value={quickAdd.currency} 
+                                            onChange={handleQuickAddChange}
+                                        >
+                                            <option value="USD">$</option>
+                                            <option value="KES">KSh</option>
+                                        </select>
+                                        <input type="number" name="amount" className="inline-input" style={{ paddingLeft: '40px', textAlign: 'right' }} placeholder="0.00" step="0.01" min="0" value={quickAdd.amount} onChange={handleQuickAddChange} />
                                     </div>
                                 </td>
                                 <td>
@@ -529,7 +655,12 @@ export default function Transactions() {
                                 paginatedData.map(tx => (
                                     <tr key={tx.id}>
                                         <td>{formatDateShort(tx.date)}</td>
-                                        <td><Badge className={getTypeBadge(tx.type)}>{tx.type}</Badge></td>
+                                        <td>
+                                            <div className="flex items-center gap-xs">
+                                                <Badge className={getTypeBadge(tx.type)}>{tx.type}</Badge>
+                                                {tx.billing_type === 'Recurring' && <span className="badge badge-warning" style={{fontSize: '10px', padding: '2px 4px'}}>Recurring</span>}
+                                            </div>
+                                        </td>
                                         <td><Badge className={getPlatformBadge(tx.account)}>{tx.account}</Badge></td>
                                         <td>{tx.projects?.project_name || '-'}</td>
                                         <td>{tx.people?.name || '-'}</td>
@@ -543,8 +674,9 @@ export default function Transactions() {
                                                 <button className="btn btn-sm btn-ghost" onClick={() => openEditModal(tx)} title="Edit">
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                                                 </button>
-                                                <button className="btn btn-sm btn-ghost text-error" onClick={() => handleDeleteTransaction(tx.id)} title="Delete">
+                                                <button className="btn btn-sm btn-ghost text-error" onClick={() => handleDeleteTransaction(tx.id)} title="Delete" style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                                    Delete
                                                 </button>
                                             </div>
                                         </td>
@@ -634,11 +766,12 @@ export default function Transactions() {
 
                     <div className="form-group">
                         <label className="form-label">Project <span className="text-muted">(Optional)</span></label>
-                        <select name="project_id" className="form-select" value={formData.project_id} onChange={e => handleProjectSelect(e, 'modal')}>
-                            <option value="">No project</option>
-                            <option value="__ADD_NEW__" style={{ color: 'var(--color-accent)', fontWeight: 600 }}>+ Add New Project</option>
-                            {projectsData.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
-                        </select>
+                        <ProjectSearchSelect 
+                            value={formData.project_id} 
+                            onChange={(val) => handleProjectSelect({ target: { value: val } }, 'modal')} 
+                            projects={projectsData}
+                            className="form-input"
+                        />
                     </div>
 
                     {showPersonModal && (
@@ -659,6 +792,21 @@ export default function Transactions() {
                                 <option value="Pending">Pending</option>
                             </select>
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">Currency</label>
+                            <select name="currency" className="form-select" value={formData.currency} onChange={handleFormChange}>
+                                <option value="USD">USD ($)</option>
+                                <option value="KES">KES (÷128 → USD)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">Billing Type</label>
+                        <select name="billing_type" className="form-select" value={formData.billing_type} onChange={handleFormChange}>
+                            <option value="One-off">One-off</option>
+                            <option value="Recurring">Recurring (monthly)</option>
+                        </select>
                     </div>
 
                     <div className="form-group">
@@ -667,6 +815,14 @@ export default function Transactions() {
                     </div>
                 </form>
             </Modal>
+
+            <ConfirmModal
+                isOpen={!!confirmDeleteId}
+                onClose={() => setConfirmDeleteId(null)}
+                onConfirm={confirmDeleteTransaction}
+                title="Delete Transaction"
+                message="Are you sure you want to delete this transaction?"
+            />
         </>
     );
 }

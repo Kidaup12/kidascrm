@@ -5,6 +5,7 @@ import { db } from '../lib/supabase';
 import { formatCurrency, formatDate, formatDateShort, getStatusBadge, getPlatformBadge, getTypeBadge } from '../lib/utils';
 import Badge from '../components/Badge';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Projects() {
     const searchParams = useSearchParams();
@@ -19,10 +20,12 @@ export default function Projects() {
     // Filters State
     const [statusFilter, setStatusFilter] = useState('');
     const [platformFilter, setPlatformFilter] = useState('');
+    const [monthFilter, setMonthFilter] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
     const [currentProject, setCurrentProject] = useState(null);
-    const [formData, setFormData] = useState({ project_name: '', client_id: '', platform: 'Upwork', status: 'Active', total_agreed_amount: '', notes: '' });
+    const [formData, setFormData] = useState({ project_name: '', client_id: '', platform: 'Upwork', status: 'Active', total_agreed_amount: '', notes: '', primary_contractor_id: '' });
     const [modalError, setModalError] = useState('');
 
     // View Modal State
@@ -32,6 +35,7 @@ export default function Projects() {
     // Assign Developer Modal State
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
     const [assignFormData, setAssignFormData] = useState({ project_id: '', person_id: '', agreed_amount: '' });
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
     useEffect(() => {
         loadInitialData();
@@ -47,7 +51,7 @@ export default function Projects() {
             ]);
             setProjectsData(projects);
             setClientsData(clients);
-            setPeopleData(people.filter(p => p.role !== 'Founder'));
+            setPeopleData(people);
 
             // Check URL for specific project
             const projectId = searchParams.get('id');
@@ -71,9 +75,32 @@ export default function Projects() {
         }
     };
 
+    // Extract unique months from projects data for filtering
+    const monthOptions = Array.from(new Set(projectsData.map(p => {
+        if (!p.created_at) return null;
+        const d = new Date(p.created_at);
+        return `${d.toLocaleString('default', { month: 'long' })} ${d.getFullYear()}`;
+    }).filter(Boolean)));
+
     let displayProjects = [...projectsData];
     if (statusFilter) displayProjects = displayProjects.filter(p => p.status === statusFilter);
     if (platformFilter) displayProjects = displayProjects.filter(p => p.platform === platformFilter);
+    if (monthFilter) {
+        displayProjects = displayProjects.filter(p => {
+            if (!p.created_at) return false;
+            const d = new Date(p.created_at);
+            const pMonth = `${d.toLocaleString('default', { month: 'long' })} ${d.getFullYear()}`;
+            return pMonth === monthFilter;
+        });
+    }
+
+    if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        displayProjects = displayProjects.filter(p => 
+            p.project_name?.toLowerCase().includes(lowerTerm) || 
+            p.client_name?.toLowerCase().includes(lowerTerm)
+        );
+    }
 
     // Form Handlers
     const handleFormChange = (e) => {
@@ -137,17 +164,21 @@ export default function Projects() {
         }
     };
 
-    const handleDeleteProject = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this project? This will also delete all associated transactions.')) {
-            return;
-        }
+    const handleDeleteProject = (id) => {
+        setConfirmDeleteId(id);
+    };
+
+    const confirmDeleteProject = async () => {
+        if (!confirmDeleteId) return;
 
         try {
-            await db.projects.delete(id);
+            await db.projects.delete(confirmDeleteId);
             loadProjectsOnly();
         } catch (error) {
             console.error('Error deleting project:', error);
             alert(error.message || 'Failed to delete project');
+        } finally {
+            setConfirmDeleteId(null);
         }
     };
 
@@ -201,11 +232,19 @@ export default function Projects() {
             <header className="page-header tapestry-header">
                 <h1 className="page-title">Projects</h1>
                 <div className="page-actions">
-                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
-                        <option value="">All Status</option>
-                        <option value="Active">Active</option>
-                        <option value="Completed">Completed</option>
-                        <option value="On Hold">On Hold</option>
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="form-input"
+                        placeholder="Search projects..."
+                        style={{ width: '200px' }}
+                    />
+                    <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
+                        <option value="">All Months</option>
+                        {monthOptions.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                        ))}
                     </select>
                     <select value={platformFilter} onChange={e => setPlatformFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
                         <option value="">All Platforms</option>
@@ -224,6 +263,14 @@ export default function Projects() {
             </header>
 
             <div className="page-body">
+                <div className="flex gap-sm mb-md" style={{ overflowX: 'auto', paddingBottom: '4px' }}>
+                    <button className={`btn ${statusFilter === '' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStatusFilter('')}>All Projects</button>
+                    <button className={`btn ${statusFilter === 'Active' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStatusFilter('Active')}>Active</button>
+                    <button className={`btn ${statusFilter === 'Completed' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStatusFilter('Completed')}>Completed</button>
+                    <button className={`btn ${statusFilter === 'On Hold' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStatusFilter('On Hold')}>On Hold</button>
+                    <button className={`btn ${statusFilter === 'Cancelled' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStatusFilter('Cancelled')}>Cancelled</button>
+                </div>
+
                 <div className="table-container">
                     <table className="table">
                         <thead>
@@ -234,6 +281,7 @@ export default function Projects() {
                                 <th>Platform</th>
                                 <th className="text-right">Agreed</th>
                                 <th className="text-right">Received</th>
+                                <th className="text-right">Remaining</th>
                                 <th className="text-right">Costs</th>
                                 <th className="text-right">Profit</th>
                                 <th>Actions</th>
@@ -276,12 +324,26 @@ export default function Projects() {
                                                     <div className="text-sm text-muted">{project.status || 'Active'}</div>
                                                 </div>
                                             </td>
-                                            <td>{project.clients?.client_name || '-'}</td>
+                                            <td>
+                                                {project.client_name ? (
+                                                    <div className="flex items-center gap-sm">
+                                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>
+                                                            {project.client_name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="font-medium text-sm">{project.client_name}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted text-sm">—</span>
+                                                )}
+                                            </td>
                                             <td><Badge className={getStatusBadge(project.status)}>{project.status}</Badge></td>
                                             <td><Badge className="badge-neutral">{project.platform || 'N/A'}</Badge></td>
-                                            <td className="text-right">{formatCurrency(project.total_agreed_amount)}</td>
-                                            <td className="text-right">{formatCurrency(totalReceived)}</td>
-                                            <td className="text-right">{formatCurrency(totalDevPayments)}</td>
+                                            <td className="text-right font-medium">{formatCurrency(project.total_agreed_amount)}</td>
+                                            <td className="text-right text-success">{formatCurrency(totalReceived)}</td>
+                                            <td className={`text-right ${project.total_agreed_amount - totalReceived > 0 ? 'text-warning' : 'text-success'}`}>
+                                                {formatCurrency(project.total_agreed_amount - totalReceived)}
+                                            </td>
+                                            <td className="text-right text-error">{formatCurrency(totalDevPayments)}</td>
                                             <td className={`text-right font-medium ${profitClass}`}>{formatCurrency(profit)}</td>
                                             <td>
                                                 <div className="flex gap-sm">
@@ -356,6 +418,13 @@ export default function Projects() {
                             <input type="number" name="total_agreed_amount" className="form-input" value={formData.total_agreed_amount} onChange={handleFormChange} step="0.01" min="0" />
                         </div>
                     </div>
+                    <div className="form-group">
+                        <label className="form-label">Primary Contractor <span className="text-muted">(Optional)</span></label>
+                        <select name="primary_contractor_id" className="form-select" value={formData.primary_contractor_id} onChange={handleFormChange}>
+                            <option value="">No primary contractor</option>
+                            {peopleData.map(p => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+                        </select>
+                    </div>
                     <div className="form-row">
                         <div className="form-group" style={{ gridColumn: 'span 2' }}>
                             <label className="form-label">Notes</label>
@@ -403,6 +472,39 @@ export default function Projects() {
                             <Badge className={getPlatformBadge(viewData.project.platform)}>{viewData.project.platform}</Badge>
                             <span className="text-sm text-muted">Created: {formatDate(viewData.project.created_at)}</span>
                         </div>
+
+                        {/* Profitability Breakdown */}
+                        {viewData.project.total_agreed_amount > 0 && (() => {
+                            const agreed = parseFloat(viewData.project.total_agreed_amount) || 1;
+                            const received = viewData.transactions.filter(t => t.type === 'Revenue').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+                            const devPaid = viewData.transactions.filter(t => t.type === 'Dev Payment').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+                            const otherCosts = viewData.transactions.filter(t => !['Revenue','Dev Payment'].includes(t.type)).reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+                            const profit = received - devPaid - otherCosts;
+                            const pct = v => Math.min(100, Math.max(0, (v / agreed) * 100)).toFixed(1);
+                            return (
+                                <div className="card mb-lg">
+                                    <div className="card-header"><h4 className="card-title">Profitability vs Agreed Amount ({formatCurrency(agreed)})</h4></div>
+                                    <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        {[
+                                            { label: 'Revenue Received', value: received, pct: pct(received), color: 'var(--color-success)' },
+                                            { label: 'Dev Payments', value: devPaid, pct: pct(devPaid), color: 'var(--color-warning)' },
+                                            { label: 'Other Costs', value: otherCosts, pct: pct(otherCosts), color: 'var(--color-error)' },
+                                            { label: 'Net Profit', value: profit, pct: pct(Math.abs(profit)), color: profit >= 0 ? 'var(--color-accent)' : 'var(--color-error)' },
+                                        ].map(row => (
+                                            <div key={row.label}>
+                                                <div className="flex justify-between mb-xs" style={{ fontSize: '13px' }}>
+                                                    <span className="text-muted">{row.label}</span>
+                                                    <span className="font-medium">{formatCurrency(row.value)} <span className="text-muted">({row.pct}%)</span></span>
+                                                </div>
+                                                <div style={{ height: '8px', borderRadius: '4px', background: 'var(--color-bg-tertiary)', overflow: 'hidden' }}>
+                                                    <div style={{ width: `${row.pct}%`, height: '100%', background: row.color, borderRadius: '4px', transition: 'width 0.4s ease' }} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* Developer Payments Section */}
                         <div className="card mb-lg">
@@ -533,6 +635,14 @@ export default function Projects() {
                     </div>
                 </form>
             </Modal>
+
+            <ConfirmModal
+                isOpen={!!confirmDeleteId}
+                onClose={() => setConfirmDeleteId(null)}
+                onConfirm={confirmDeleteProject}
+                title="Delete Project"
+                message="Are you sure you want to delete this project? This will also delete all associated transactions."
+            />
         </>
     );
 }

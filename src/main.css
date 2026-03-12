@@ -397,9 +397,6 @@ h5 {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    position: sticky;
-    top: 0;
-    z-index: 50;
     /* Glassmorphism check: removed for cleaner look, sticking to Wise clean aesthetic */
 }
 
@@ -899,9 +896,6 @@ h6 {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    position: sticky;
-    top: 0;
-    z-index: 50;
 }
 
 .page-title {

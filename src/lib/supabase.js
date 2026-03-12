@@ -16,7 +16,9 @@ export const db = {
             if (error) throw error; return data;
         },
         async create(client) {
-            const { data, error } = await supabaseClient.from('clients').insert(client).select().single();
+            const { data, error } = await supabaseClient.from('clients')
+                .insert({ ...client, created_at: new Date().toISOString() })
+                .select().single();
             if (error) throw error; return data;
         },
         async update(id, client) {
@@ -30,6 +32,17 @@ export const db = {
         async getWithFinancials() {
             const { data, error } = await supabaseClient.from('client_financials').select('*').order('client_name');
             if (error) throw error; return data || [];
+        },
+        async getLastTransactionDate(clientId) {
+            // Find the most recent transaction for any project belonging to this client
+            const { data, error } = await supabaseClient
+                .from('transactions')
+                .select('date, projects!inner(client_id)')
+                .eq('projects.client_id', clientId)
+                .order('date', { ascending: false })
+                .limit(1);
+            if (error) return null;
+            return data?.[0]?.date || null;
         }
     },
     projects: {
@@ -50,7 +63,9 @@ export const db = {
             if (error) throw error; return data;
         },
         async create(project) {
-            const { data, error } = await supabaseClient.from('projects').insert(project).select().single();
+            const { data, error } = await supabaseClient.from('projects')
+                .insert({ ...project, created_at: new Date().toISOString() })
+                .select().single();
             if (error) throw error; return data;
         },
         async update(id, project) {
@@ -108,6 +123,10 @@ export const db = {
         async getByProject(projectId) {
             const { data, error } = await supabaseClient.from('project_developers').select('*, people(name)').eq('project_id', projectId);
             if (error) throw error; return data || [];
+        },
+        async getByPerson(personId) {
+            const { data, error } = await supabaseClient.from('project_developers').select('*, projects(project_name)').eq('person_id', personId);
+            if (error) throw error; return data || [];
         }
     },
     transactions: {
@@ -164,6 +183,27 @@ export const db = {
             kpis.profit = kpis.revenue - kpis.totalExpenses;
             return kpis;
         },
+        async getMRRData(startDate, endDate) {
+            const { data, error } = await supabaseClient.from('transactions')
+                .select('type, amount, billing_type')
+                .gte('date', startDate).lte('date', endDate)
+                .eq('billing_type', 'Recurring');
+            if (error) return { mrr: 0, recurringCosts: 0 };
+            let mrr = 0, recurringCosts = 0;
+            (data || []).forEach(t => {
+                const amount = parseFloat(t.amount) || 0;
+                if (t.type === 'Revenue') mrr += amount;
+                else recurringCosts += amount;
+            });
+            return { mrr, recurringCosts };
+        },
+        async getNewCounts(startDate, endDate) {
+            const [{ count: newClients }, { count: newProjects }] = await Promise.all([
+                supabaseClient.from('clients').select('*', { count: 'exact', head: true }).gte('created_at', startDate).lte('created_at', endDate + 'T23:59:59'),
+                supabaseClient.from('projects').select('*', { count: 'exact', head: true }).gte('created_at', startDate).lte('created_at', endDate + 'T23:59:59')
+            ]);
+            return { newClients: newClients || 0, newProjects: newProjects || 0 };
+        },
         async getExpenseBreakdown(startDate, endDate) {
             const kpis = await this.getKPIs(startDate, endDate);
             return {
@@ -175,22 +215,35 @@ export const db = {
             const { data, error } = await supabaseClient.from('monthly_summary').select('*').order('month', { ascending: false }).limit(months);
             if (error) throw error; return (data || []).reverse();
         },
-        async getFounderBalances() {
+        async getFounderBalances(startDate, endDate) {
             const { data: founders, error: foundersError } = await supabaseClient.from('people').select('id, name').eq('role', 'Founder');
             if (foundersError) throw foundersError;
-            const { data: summaries, error: summaryError } = await supabaseClient.from('monthly_summary').select('*').order('month');
-            if (summaryError) throw summaryError;
-            const { data: withdrawals, error: withdrawalsError } = await supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed');
-            if (withdrawalsError) throw withdrawalsError;
+            
+            // get month withdrawals
+            const { data: monthW } = await supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed').gte('date', startDate).lte('date', endDate);
+            
+            // get year withdrawals
+            const yearStart = startDate.substring(0, 4) + '-01-01';
+            const yearEnd = startDate.substring(0, 4) + '-12-31';
+            const { data: yearW } = await supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed').gte('date', yearStart).lte('date', yearEnd);
 
-            const totalProfit = (summaries || []).reduce((sum, s) => sum + parseFloat(s.net_profit || 0), 0);
-            const founderCount = (founders || []).length || 1;
-            const sharePerFounder = totalProfit / founderCount;
+            const calcOwed = (withdrawals) => {
+                const totals = {};
+                (founders || []).forEach(f => totals[f.id] = 0);
+                (withdrawals || []).forEach(w => {
+                    if (totals[w.person_id] !== undefined) totals[w.person_id] += parseFloat(w.amount || 0);
+                });
+                const maxW = Math.max(...Object.values(totals), 0);
+                return (founders || []).map(f => {
+                    const w = totals[f.id];
+                    return { id: f.id, name: f.name, balance: maxW - w };
+                }).filter(f => f.balance > 0);
+            };
 
-            return (founders || []).map(founder => {
-                const totalWithdrawn = (withdrawals || []).filter(w => w.person_id === founder.id).reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
-                return { id: founder.id, name: founder.name, shareDue: sharePerFounder, totalWithdrawn: totalWithdrawn, balance: sharePerFounder - totalWithdrawn };
-            });
+            return {
+                monthly: calcOwed(monthW),
+                yearly: calcOwed(yearW)
+            };
         },
         async getMoneyOwed() {
             const { data: projectsData, error: projectsError } = await supabaseClient.from('project_financials').select('amount_owed').gt('amount_owed', 0);
@@ -208,11 +261,15 @@ export const db = {
             if (error) throw error; return data || [];
         },
         async getRecurringCosts() {
-            const { data, error } = await supabaseClient.from('transactions').select('*').eq('type', 'Tool Cost').order('date', { ascending: false });
+            const { data, error } = await supabaseClient.from('transactions')
+                .select('*')
+                .eq('billing_type', 'Recurring')
+                .neq('type', 'Revenue')
+                .order('date', { ascending: false });
             if (error) throw error;
             const tools = {};
             (data || []).forEach(t => {
-                const desc = t.description?.trim() || 'Unknown Tool';
+                const desc = t.description?.trim() || 'Unknown Recurring Cost';
                 if (!tools[desc]) {
                     tools[desc] = { name: desc, lastPaidDate: new Date(t.date), amount: parseFloat(t.amount) || 0 };
                 }
@@ -246,6 +303,14 @@ export const db = {
                 .order('date', { ascending: false });
             if (error) throw error; return data || [];
         },
+        async create(payload) {
+            const { data, error } = await supabaseClient.from('transactions').insert({ ...payload, payment_status: 'Pending' }).select().single();
+            if (error) throw error; return data;
+        },
+        async update(id, payload) {
+            const { data, error } = await supabaseClient.from('transactions').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+            if (error) throw error; return data;
+        },
         async markPaid(id) {
             const { data, error } = await supabaseClient.from('transactions')
                 .update({ payment_status: 'Completed', date: new Date().toISOString().split('T')[0] })
@@ -271,5 +336,89 @@ export const db = {
             const { data, error } = await supabaseClient.from('project_financials').select('*').order('total_received', { ascending: false }).limit(limit);
             if (error) throw error; return data || [];
         }
+    },
+    accountBalances: {
+        // Get all balance records (sorted by account + month)
+        async getAll() {
+            const { data, error } = await supabaseClient.from('account_monthly_balances').select('*').order('account').order('month');
+            if (error) throw error; return data || [];
+        },
+        // Get records for a specific month
+        async getByMonth(month) {
+            const { data, error } = await supabaseClient.from('account_monthly_balances').select('*').eq('month', month);
+            if (error) throw error; return data || [];
+        },
+        // Upsert a balance record (create or update)
+        async upsert(account, month, fields) {
+            const { data, error } = await supabaseClient.from('account_monthly_balances')
+                .upsert({ account, month, ...fields }, { onConflict: 'account,month' })
+                .select().single();
+            if (error) throw error; return data;
+        },
+        // Lock the opening balance for Jan 2026 (is_locked = true)
+        async lock(account, month) {
+            const { data, error } = await supabaseClient.from('account_monthly_balances')
+                .update({ is_locked: true }).eq('account', month ? `${account}_${month}` : account).select();
+            if (error) throw error; return data;
+        },
+        // Calculate the expected closing balance from transactions
+        async getCalculatedBalance(account, month) {
+            // Get the start of this month and end of this month
+            const [year, mon] = month.split('-');
+            const startDate = `${month}-01`;
+            const lastDay = new Date(parseInt(year), parseInt(mon), 0).getDate();
+            const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+            const { data, error } = await supabaseClient.from('transactions')
+                .select('type, amount').eq('account', account).gte('date', startDate).lte('date', endDate);
+            if (error) return 0;
+            let net = 0;
+            (data || []).forEach(t => {
+                const amt = parseFloat(t.amount) || 0;
+                if (t.type === 'Revenue') net += amt;
+                else net -= amt;
+            });
+            return net;
+        }
+    },
+    reports: {
+        async getMonthlySummary(year) {
+            const { data, error } = await supabaseClient.from('monthly_summary')
+                .select('*')
+                .gte('month', `${year}-01-01`)
+                .lte('month', `${year}-12-31`)
+                .order('month');
+            if (error) throw error;
+            return data || [];
+        }
+    },
+    contractorOwed: {
+        // Get all projects with a primary contractor + calculate amount owed
+        async getOwedByContractor() {
+            // Fetch all projects that have a primary_contractor_id set
+            const { data: projects, error: pErr } = await supabaseClient.from('projects')
+                .select('id, project_name, total_agreed_amount, primary_contractor_id, people(name, role)')
+                .not('primary_contractor_id', 'is', null);
+            if (pErr) throw pErr;
+
+            // For each project, calculate total payments made to that contractor via Dev Payment transactions
+            const results = await Promise.all((projects || []).map(async proj => {
+                const { data: payments } = await supabaseClient.from('transactions')
+                    .select('amount')
+                    .eq('project_id', proj.id)
+                    .eq('person_id', proj.primary_contractor_id)
+                    .in('type', ['Dev Payment'])
+                    .eq('payment_status', 'Completed');
+                const paid = (payments || []).reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+                const agreed = parseFloat(proj.total_agreed_amount || 0);
+                return {
+                    ...proj,
+                    agreed,
+                    paid,
+                    owed: Math.max(0, agreed - paid)
+                };
+            }));
+            return results;
+        }
     }
 };
+

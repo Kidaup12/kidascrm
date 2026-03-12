@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
-import { Doughnut, Line } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler } from 'chart.js';
+import { Doughnut, Line, Bar } from 'react-chartjs-2';
 import { db } from '../lib/supabase';
 import { formatCurrency, formatMonth, formatDateShort, getTypeBadge, chartColors } from '../lib/utils';
 import Badge from '../components/Badge';
+import AccountReconciliation from '../components/AccountReconciliation';
 
-ChartJS.register(ArcElement, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+ChartJS.register(ArcElement, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, '0');
@@ -43,18 +44,6 @@ function weeksInMonth(yearMonth) {
     return weeks;
 }
 
-function daysInWeek(startISO, endISO) {
-    const days = [];
-    const cur = new Date(startISO);
-    const end = new Date(endISO);
-    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    while (cur <= end) {
-        days.push({ date: toISO(cur), label: `${DAYS[cur.getDay()]} ${cur.getDate()}` });
-        cur.setDate(cur.getDate() + 1);
-    }
-    return days;
-}
-
 export default function Dashboard() {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
@@ -62,15 +51,16 @@ export default function Dashboard() {
 
     const [selectedMonth, setSelectedMonth] = useState(thisMonth);
     const [selectedWeek, setSelectedWeek]   = useState(null); // {start, end, label}
-    const [selectedDay,  setSelectedDay]    = useState(null); // 'YYYY-MM-DD'
-    const [monthScrollIdx, setMonthScrollIdx] = useState(Math.max(0, ALL_MONTHS.length - 5));
+    
+    // Find where the current month is in the array, and put it near the end of the 5-item visible window
+    const thisMonthIdx = ALL_MONTHS.indexOf(thisMonth);
+    const initialScrollIdx = thisMonthIdx >= 0 ? Math.max(0, thisMonthIdx - 4) : Math.max(0, ALL_MONTHS.length - 5);
+    const [monthScrollIdx, setMonthScrollIdx] = useState(initialScrollIdx);
 
     const weeks = weeksInMonth(selectedMonth);
-    const days  = selectedWeek ? daysInWeek(selectedWeek.start, selectedWeek.end) : [];
 
     // Compute date range from selection
     const getRange = () => {
-        if (selectedDay)  return { startDate: selectedDay,         endDate: selectedDay };
         if (selectedWeek) return { startDate: selectedWeek.start,  endDate: selectedWeek.end };
         // whole month
         const [y, m] = selectedMonth.split('-').map(Number);
@@ -83,14 +73,18 @@ export default function Dashboard() {
         kpis: { revenue: 0, profit: 0, totalExpenses: 0, founderWithdrawals: 0 },
         expenseData: { labels: [], values: [] },
         trendData: [],
-        founderBalances: [],
+        founderBalances: { monthly: [], yearly: [] },
         moneyOwed: { clientsOweUs: 0, weOweContractors: 0 },
         recentTransactions: [],
         accountBalances: { Upwork: 0, Wise: 0, Bank: 0, Till: 0 },
-        recurringCosts: []
+        recurringCosts: [],
+        mrrData: { mrr: 0, recurringCosts: 0 },
+        newCounts: { newClients: 0, newProjects: 0 }
     });
 
-    const rangeKey = JSON.stringify({ selectedMonth, selectedWeek, selectedDay });
+    const [founderView, setFounderView] = useState('Monthly');
+
+    const rangeKey = JSON.stringify({ selectedMonth, selectedWeek });
 
     useEffect(() => {
         const loadData = async () => {
@@ -98,18 +92,20 @@ export default function Dashboard() {
             try {
                 const { startDate, endDate } = getRange();
 
-                const [kpis, expenseData, trendData, founderBalances, moneyOwed, recentTxs, accountBalances, recurringCosts] = await Promise.all([
+                const [kpis, expenseData, trendData, founderBalances, moneyOwed, recentTxs, accountBalances, recurringCosts, mrrData, newCounts] = await Promise.all([
                     db.dashboard.getKPIs(startDate, endDate),
                     db.dashboard.getExpenseBreakdown(startDate, endDate),
                     db.dashboard.getMonthlyTrend(6),
-                    db.dashboard.getFounderBalances(),
+                    db.dashboard.getFounderBalances(startDate, endDate),
                     db.dashboard.getMoneyOwed(),
                     db.dashboard.getRecentTransactions(5),
                     db.dashboard.getAccountBalances(),
-                    db.dashboard.getRecurringCosts()
+                    db.dashboard.getRecurringCosts(),
+                    db.dashboard.getMRRData(startDate, endDate),
+                    db.dashboard.getNewCounts(startDate, endDate)
                 ]);
 
-                setData({ kpis, expenseData, trendData, founderBalances, moneyOwed, recentTransactions: recentTxs, accountBalances, recurringCosts });
+                setData({ kpis, expenseData, trendData, founderBalances, moneyOwed, recentTransactions: recentTxs, accountBalances, recurringCosts, mrrData, newCounts });
             } catch (error) {
                 console.error('Dashboard error', error);
             } finally {
@@ -138,11 +134,19 @@ export default function Dashboard() {
     const expenseChartOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: '70%',
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(0,0,0,0.05)' },
+                ticks: { callback: (value) => formatCurrency(value) }
+            },
+            x: {
+                grid: { display: false }
+            }
+        },
         plugins: {
             legend: {
-                position: 'right',
-                labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { family: 'Inter', size: 12 } }
+                display: false // no need for legend on a bar chart where categories are on the axis
             },
             tooltip: {
                 callbacks: {
@@ -166,19 +170,14 @@ export default function Dashboard() {
             {
                 label: 'Revenue',
                 data: data.trendData.map(d => parseFloat(d.revenue) || 0),
-                borderColor: chartColors.revenue,
-                backgroundColor: 'rgba(0, 168, 118, 0.1)',
-                fill: true,
-                tension: 0.4,
-                borderWidth: 2
+                backgroundColor: 'rgba(0, 168, 118, 0.8)',
+                borderRadius: 4
             },
             {
                 label: 'Profit',
                 data: data.trendData.map(d => parseFloat(d.net_profit) || 0),
-                borderColor: chartColors.profit,
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                tension: 0.4
+                backgroundColor: 'rgba(21, 101, 192, 0.8)',
+                borderRadius: 4
             }
         ]
     };
@@ -218,7 +217,7 @@ export default function Dashboard() {
                         <div className="month-tabs">
                             {visibleMonths.map(ym => (
                                 <button key={ym} className={`month-tab ${selectedMonth === ym ? 'active' : ''}`}
-                                    onClick={() => { setSelectedMonth(ym); setSelectedWeek(null); setSelectedDay(null); }}>
+                                    onClick={() => { setSelectedMonth(ym); setSelectedWeek(null); }}>
                                     {fmtMonth(ym)}
                                 </button>
                             ))}
@@ -236,23 +235,8 @@ export default function Dashboard() {
                                 <button key={w.start}
                                     className={`btn btn-sm ${selectedWeek?.start === w.start ? 'btn-primary' : 'btn-ghost'}`}
                                     style={{ fontSize: '12px', padding: '4px 10px' }}
-                                    onClick={() => { setSelectedWeek(selectedWeek?.start === w.start ? null : w); setSelectedDay(null); }}>
+                                    onClick={() => setSelectedWeek(selectedWeek?.start === w.start ? null : w)}>
                                     W{i + 1} ({w.label})
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Row 3: Days in selected week */}
-                    {selectedWeek && days.length > 0 && (
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', alignSelf: 'center', marginRight: '4px' }}>Day:</span>
-                            {days.map(d => (
-                                <button key={d.date}
-                                    className={`btn btn-sm ${selectedDay === d.date ? 'btn-primary' : 'btn-ghost'}`}
-                                    style={{ fontSize: '12px', padding: '4px 10px' }}
-                                    onClick={() => setSelectedDay(selectedDay === d.date ? null : d.date)}>
-                                    {d.label}
                                 </button>
                             ))}
                         </div>
@@ -320,13 +304,57 @@ export default function Dashboard() {
                             </div>
                         </div>
 
+                        {/* MRR + Growth KPI Row */}
+                        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '24px' }}>
+                            <div className="kpi-card">
+                                <div className="kpi-card-header">
+                                    <span className="kpi-label">MRR (Recurring Revenue)</span>
+                                    <div className="kpi-icon revenue">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                                    </div>
+                                </div>
+                                <div className="kpi-value">{formatCurrency(data.mrrData.mrr)}</div>
+                                <div className="kpi-change"><span>Recurring income</span></div>
+                            </div>
+                            <div className="kpi-card">
+                                <div className="kpi-card-header">
+                                    <span className="kpi-label">Recurring Costs</span>
+                                    <div className="kpi-icon expenses">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                    </div>
+                                </div>
+                                <div className="kpi-value">{formatCurrency(data.mrrData.recurringCosts)}</div>
+                                <div className="kpi-change"><span>Subscriptions & tools</span></div>
+                            </div>
+                            <div className="kpi-card">
+                                <div className="kpi-card-header">
+                                    <span className="kpi-label">New Clients</span>
+                                    <div className="kpi-icon revenue">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                    </div>
+                                </div>
+                                <div className="kpi-value">{data.newCounts.newClients}</div>
+                                <div className="kpi-change"><span>Added this period</span></div>
+                            </div>
+                            <div className="kpi-card">
+                                <div className="kpi-card-header">
+                                    <span className="kpi-label">New Projects</span>
+                                    <div className="kpi-icon profit">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    </div>
+                                </div>
+                                <div className="kpi-value">{data.newCounts.newProjects}</div>
+                                <div className="kpi-change"><span>Started this period</span></div>
+                            </div>
+                        </div>
+
                         {/* Charts Row */}
                         <div className="chart-grid">
                             <div className="card">
                                 <div className="card-header"><h3 className="card-title">Expense Breakdown</h3></div>
                                 <div className="card-body">
                                     <div className="chart-container" style={{ position: 'relative', height: '300px' }}>
-                                        <Doughnut data={expenseChartData} options={expenseChartOptions} />
+                                        <Bar data={expenseChartData} options={expenseChartOptions} />
                                     </div>
                                 </div>
                             </div>
@@ -335,7 +363,7 @@ export default function Dashboard() {
                                 <div className="card-header"><h3 className="card-title">Revenue & Profit Trend</h3></div>
                                 <div className="card-body">
                                     <div className="chart-container" style={{ position: 'relative', height: '300px' }}>
-                                        <Line data={trendChartData} options={trendChartOptions} />
+                                        <Bar data={trendChartData} options={trendChartOptions} />
                                     </div>
                                 </div>
                             </div>
@@ -362,15 +390,21 @@ export default function Dashboard() {
                             </div>
 
                             <div className="summary-card">
-                                <div className="summary-card-header"><h4 className="card-title">Founder Balances</h4></div>
-                                <div className="founder-widget">
-                                    {data.founderBalances.length === 0 ? (
-                                        <p className="text-muted text-center" style={{ padding: '12px' }}>No founder data</p>
+                                <div className="summary-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h4 className="card-title" style={{ margin: 0 }}>Founder Balances</h4>
+                                    <div className="btn-group" style={{ display: 'flex', gap: '4px' }}>
+                                        <button className={`btn btn-xs ${founderView === 'Monthly' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFounderView('Monthly')}>Monthly</button>
+                                        <button className={`btn btn-xs ${founderView === 'Yearly' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFounderView('Yearly')}>Yearly</button>
+                                    </div>
+                                </div>
+                                <div className="founder-widget" style={{ minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    {(!data.founderBalances[founderView.toLowerCase()] || data.founderBalances[founderView.toLowerCase()].length === 0) ? (
+                                        <p className="text-muted text-center" style={{ padding: '12px', margin: 0 }}>All settled up!</p>
                                     ) : (
-                                        data.founderBalances.map(f => (
+                                        data.founderBalances[founderView.toLowerCase()].map(f => (
                                             <div className="founder-card" key={f.id}>
                                                 <div className="founder-name">{f.name}</div>
-                                                <div className="founder-balance">{formatCurrency(f.balance)}</div>
+                                                <div className="founder-balance text-success">{formatCurrency(f.balance)}</div>
                                                 <div className="founder-label">owed</div>
                                             </div>
                                         ))
@@ -448,6 +482,9 @@ export default function Dashboard() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Account Balance Reconciliation */}
+                        <AccountReconciliation />
                     </>
                 )}
             </div>
