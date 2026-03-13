@@ -139,6 +139,7 @@ export const db = {
             if (filters.projectId) query = query.eq('project_id', filters.projectId);
             if (filters.personId) query = query.eq('person_id', filters.personId);
             if (filters.paymentStatus) query = query.eq('payment_status', filters.paymentStatus);
+            if (filters.billingType) query = query.eq('billing_type', filters.billingType);
             const { data, error } = await query;
             if (error) throw error; return data || [];
         },

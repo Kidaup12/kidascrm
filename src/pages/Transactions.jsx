@@ -83,6 +83,8 @@ export default function Transactions() {
     const [typeFilter, setTypeFilter] = useState('');
     const [accountFilter, setAccountFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [billingTypeFilter, setBillingTypeFilter] = useState('');
+    const [projectFilter, setProjectFilter] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
     // Month Picker State
@@ -106,6 +108,8 @@ export default function Transactions() {
         description: '',
         payment_status: 'Completed',
         amount: '',
+        amountDave: '',
+        amountRandy: '',
         currency: 'USD',
         billing_type: 'One-off'
     });
@@ -121,6 +125,8 @@ export default function Transactions() {
         description: '',
         payment_status: 'Completed',
         amount: '',
+        amountDave: '',
+        amountRandy: '',
         billing_type: 'One-off',
         currency: 'USD'
     });
@@ -185,7 +191,7 @@ export default function Transactions() {
         if (selectedMonth) {
             loadTransactions();
         }
-    }, [selectedMonth, typeFilter, accountFilter, statusFilter]);
+    }, [selectedMonth, typeFilter, accountFilter, statusFilter, billingTypeFilter, projectFilter]);
 
     // Filtering logic
     const filteredData = useMemo(() => {
@@ -193,6 +199,8 @@ export default function Transactions() {
         if (typeFilter) items = items.filter(t => t.type === typeFilter);
         if (accountFilter) items = items.filter(t => t.account === accountFilter);
         if (statusFilter) items = items.filter(t => t.payment_status === statusFilter);
+        if (billingTypeFilter) items = items.filter(t => (t.billing_type || 'One-off') === billingTypeFilter);
+        if (projectFilter) items = items.filter(t => t.project_id === projectFilter);
         
         if (searchTerm) {
             const lowerTerm = searchTerm.toLowerCase();
@@ -200,12 +208,13 @@ export default function Transactions() {
                 t.description?.toLowerCase().includes(lowerTerm) ||
                 t.projects?.project_name?.toLowerCase().includes(lowerTerm) ||
                 t.people?.name?.toLowerCase().includes(lowerTerm) ||
-                t.amount?.toString().includes(lowerTerm)
+                t.amount?.toString().includes(lowerTerm) ||
+                (t.billing_type || 'One-off').toLowerCase().includes(lowerTerm)
             );
         }
         
         return items;
-    }, [transactionsData, typeFilter, accountFilter, statusFilter, searchTerm]);
+    }, [transactionsData, typeFilter, accountFilter, statusFilter, billingTypeFilter, projectFilter, searchTerm]);
 
     const loadTransactions = async () => {
         setLoading(true);
@@ -222,6 +231,8 @@ export default function Transactions() {
                 type: typeFilter || undefined,
                 account: accountFilter || undefined,
                 paymentStatus: statusFilter || undefined,
+                billingType: billingTypeFilter || undefined,
+                projectId: projectFilter || undefined,
                 startDate,
                 endDate
             };
@@ -335,7 +346,7 @@ export default function Transactions() {
             date: new Date().toISOString().split('T')[0],
             type: 'Revenue', account: 'Upwork',
             project_id: '', person_id: '', description: '',
-            payment_status: 'Completed', amount: '',
+            payment_status: 'Completed', amount: '', amountDave: '', amountRandy: '',
             currency: 'USD', billing_type: 'One-off'
         });
         setIsAddEditModalOpen(true);
@@ -352,6 +363,8 @@ export default function Transactions() {
             description: tx.description || '',
             payment_status: tx.payment_status || 'Completed',
             amount: tx.amount || '',
+            amountDave: '',
+            amountRandy: '',
             currency: tx.currency || 'USD',
             billing_type: tx.billing_type || 'One-off'
         });
@@ -359,39 +372,104 @@ export default function Transactions() {
     };
 
     const handleSaveTransaction = async (dataToSave, isQuickAdd = false) => {
-        // Clean amount
-        if (dataToSave.amount) {
-            dataToSave.amount = String(dataToSave.amount).replace(/[$,]/g, '');
-        }
+        // Clean amounts
+        if (dataToSave.amount) dataToSave.amount = String(dataToSave.amount).replace(/[$,]/g, '');
+        if (dataToSave.amountDave) dataToSave.amountDave = String(dataToSave.amountDave).replace(/[$,]/g, '');
+        if (dataToSave.amountRandy) dataToSave.amountRandy = String(dataToSave.amountRandy).replace(/[$,]/g, '');
 
-        if (!dataToSave.date || !dataToSave.amount || !dataToSave.type || !dataToSave.account) {
-            alert('Date, amount, type, and account are required');
+        if (!dataToSave.date || !dataToSave.type || !dataToSave.account) {
+            alert('Date, type, and account are required');
             return false;
         }
 
-        if (['Dev Payment', 'Salary', 'Founder Withdrawal'].includes(dataToSave.type) && !dataToSave.person_id) {
-            alert('Person is required for this transaction type');
-            return false;
-        }
+        const isSplitWithdrawal = dataToSave.type === 'Founder Withdrawal' && (!currentTransaction || isQuickAdd);
 
-        const payload = {
-            ...dataToSave,
-            project_id: dataToSave.project_id || null,
-            person_id: dataToSave.person_id || null,
-            // KES→USD conversion
-            currency: dataToSave.currency || 'USD',
-            original_amount: dataToSave.currency === 'KES' ? parseFloat(String(dataToSave.amount).replace(/[$,]/g, '')) : null,
-            amount: dataToSave.currency === 'KES'
-                ? +(parseFloat(String(dataToSave.amount).replace(/[$,]/g, '')) / 128).toFixed(2)
-                : parseFloat(String(dataToSave.amount).replace(/[$,]/g, '')),
-            billing_type: dataToSave.billing_type || null
-        };
+        if (isSplitWithdrawal) {
+            if (!dataToSave.amountDave && !dataToSave.amountRandy && !dataToSave.amount) {
+                alert('At least one amount is required for Dave or Randy');
+                return false;
+            }
+        } else {
+            if (!dataToSave.amount) {
+                alert('Amount is required');
+                return false;
+            }
+            if (['Dev Payment', 'Salary'].includes(dataToSave.type) && !dataToSave.person_id) {
+                alert('Person is required for this transaction type');
+                return false;
+            }
+        }
 
         try {
-            if (currentTransaction && !isQuickAdd) {
-                await db.transactions.update(currentTransaction.id, payload);
+            if (isSplitWithdrawal) {
+                const dave = peopleData.find(p => p.name === 'Dave' && p.role === 'Founder');
+                const randy = peopleData.find(p => p.name === 'Randy' && p.role === 'Founder');
+                const promises = [];
+
+                const basePayload = {
+                    date: dataToSave.date,
+                    type: dataToSave.type,
+                    account: dataToSave.account,
+                    project_id: dataToSave.project_id || null,
+                    description: dataToSave.description || '',
+                    payment_status: dataToSave.payment_status || 'Completed',
+                    currency: dataToSave.currency || 'USD',
+                    billing_type: dataToSave.billing_type || null
+                };
+
+                if (dataToSave.amountDave && dave) {
+                    const amtStr = dataToSave.amountDave;
+                    promises.push(db.transactions.create({
+                        ...basePayload,
+                        person_id: dave.id,
+                        original_amount: basePayload.currency === 'KES' ? parseFloat(amtStr) : null,
+                        amount: basePayload.currency === 'KES' ? +(parseFloat(amtStr) / 128).toFixed(2) : parseFloat(amtStr)
+                    }));
+                }
+                if (dataToSave.amountRandy && randy) {
+                    const amtStr = dataToSave.amountRandy;
+                    promises.push(db.transactions.create({
+                        ...basePayload,
+                        person_id: randy.id,
+                        original_amount: basePayload.currency === 'KES' ? parseFloat(amtStr) : null,
+                        amount: basePayload.currency === 'KES' ? +(parseFloat(amtStr) / 128).toFixed(2) : parseFloat(amtStr)
+                    }));
+                }
+
+                // Fallback if they only provided the regular amount in quick add
+                if (!dataToSave.amountDave && !dataToSave.amountRandy && dataToSave.amount) {
+                    promises.push(db.transactions.create({
+                        ...basePayload,
+                        person_id: dataToSave.person_id || null,
+                        original_amount: basePayload.currency === 'KES' ? parseFloat(dataToSave.amount) : null,
+                        amount: basePayload.currency === 'KES' ? +(parseFloat(dataToSave.amount) / 128).toFixed(2) : parseFloat(dataToSave.amount)
+                    }));
+                }
+
+                await Promise.all(promises);
+
             } else {
-                await db.transactions.create(payload);
+                const payload = {
+                    date: dataToSave.date,
+                    type: dataToSave.type,
+                    account: dataToSave.account,
+                    description: dataToSave.description || '',
+                    payment_status: dataToSave.payment_status || 'Completed',
+                    project_id: dataToSave.project_id || null,
+                    person_id: dataToSave.person_id || null,
+                    currency: dataToSave.currency || 'USD',
+                    original_amount: dataToSave.currency === 'KES' ? parseFloat(dataToSave.amount) : null,
+                    amount: dataToSave.currency === 'KES'
+                        ? +(parseFloat(dataToSave.amount) / 128).toFixed(2)
+                        : parseFloat(dataToSave.amount),
+                    billing_type: dataToSave.billing_type || null
+                };
+
+                if (currentTransaction && !isQuickAdd) {
+                    await db.transactions.update(currentTransaction.id, payload);
+                } else {
+                    await db.transactions.create(payload);
+                }
             }
             loadTransactions();
             return true;
@@ -413,7 +491,7 @@ export default function Transactions() {
         const success = await handleSaveTransaction(quickAdd, true);
         if (success) {
             setQuickAdd({
-                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Completed', amount: '', billing_type: 'One-off', currency: 'USD'
+                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Completed', amount: '', amountDave: '', amountRandy: '', billing_type: 'One-off', currency: 'USD'
             });
             document.getElementById('quickDate')?.focus();
         }
@@ -425,7 +503,7 @@ export default function Transactions() {
             saveQuickTransaction();
         } else if (e.key === 'Escape') {
             setQuickAdd({
-                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Paid', amount: '', billing_type: 'One-off', currency: 'USD'
+                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Paid', amount: '', amountDave: '', amountRandy: '', billing_type: 'One-off', currency: 'USD'
             });
         }
     };
@@ -450,8 +528,10 @@ export default function Transactions() {
     const selectedIndex = availableMonths.indexOf(selectedMonth);
 
     // Form logic for showing/hiding fields
-    const showProjectModal = true; // Project is always shown per legacy switch logic
-    const showPersonModal = ['Dev Payment', 'Salary', 'Founder Withdrawal'].includes(formData.type);
+    const showProjectModal = true;
+    
+    const isSplitFounderWithdrawal = formData.type === 'Founder Withdrawal' && !currentTransaction;
+    const showPersonModal = ['Dev Payment', 'Salary', 'Founder Withdrawal'].includes(formData.type) && !isSplitFounderWithdrawal;
 
     return (
         <>
@@ -506,7 +586,7 @@ export default function Transactions() {
                 {/* Filters */}
                 <div className="card mb-lg">
                     <div className="card-body">
-                        <div className="form-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                        <div className="form-row" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label className="form-label">Type</label>
                                 <select className="form-select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
@@ -528,6 +608,23 @@ export default function Transactions() {
                                     <option value="Bank">Bank</option>
                                     <option value="Wise">Wise</option>
                                     <option value="Till">Till</option>
+                                </select>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label">Billing</label>
+                                <select className="form-select" value={billingTypeFilter} onChange={e => setBillingTypeFilter(e.target.value)}>
+                                    <option value="">All Billing</option>
+                                    <option value="One-off">One-off</option>
+                                    <option value="Recurring">Recurring</option>
+                                </select>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label">Project</label>
+                                <select className="form-select" value={projectFilter} onChange={e => setProjectFilter(e.target.value)}>
+                                    <option value="">All Projects</option>
+                                    {projectsData.map(p => (
+                                        <option key={p.id} value={p.id}>{p.project_name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -732,11 +829,32 @@ export default function Transactions() {
                             <input type="date" name="date" className="form-input" required value={formData.date} onChange={handleFormChange} />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Amount *</label>
-                            <div style={{ position: 'relative' }}>
-                                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)', pointerEvents: 'none' }}>$</span>
-                                <input type="number" name="amount" className="form-input" style={{ paddingLeft: '28px' }} step="0.01" min="0" required placeholder="0.00" value={formData.amount} onChange={handleFormChange} />
-                            </div>
+                            {isSplitFounderWithdrawal ? (
+                                <div className="flex gap-sm">
+                                    <div style={{flex: 1}}>
+                                        <label className="form-label">Amount (Dave)</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)', pointerEvents: 'none' }}>$</span>
+                                            <input type="number" name="amountDave" className="form-input" style={{ paddingLeft: '28px' }} step="0.01" min="0" placeholder="0.00" value={formData.amountDave} onChange={handleFormChange} />
+                                        </div>
+                                    </div>
+                                    <div style={{flex: 1}}>
+                                        <label className="form-label">Amount (Randy)</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)', pointerEvents: 'none' }}>$</span>
+                                            <input type="number" name="amountRandy" className="form-input" style={{ paddingLeft: '28px' }} step="0.01" min="0" placeholder="0.00" value={formData.amountRandy} onChange={handleFormChange} />
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <label className="form-label">Amount *</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)', pointerEvents: 'none' }}>$</span>
+                                        <input type="number" name="amount" className="form-input" style={{ paddingLeft: '28px' }} step="0.01" min="0" required placeholder="0.00" value={formData.amount} onChange={handleFormChange} />
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
 

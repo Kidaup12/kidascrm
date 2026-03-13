@@ -1,0 +1,48 @@
+Date,Earnings,Client,Withdrawals,Paid to Dave,Paid to Randy,Debts ,Debt By,Cleared?,Expenses,Expenses Name,Connects
+1-Oct,,,$10.00,0,0,,,,10,OpenAI Credits ($7 = conversion & tax),
+2-Oct,,,,,,,,,,,$17.00
+3-Oct,,,,,,$100.00,Dave,,$100,Frech,
+4-Oct,,,,,,,,,,,$17.40
+5-Oct,,,,,,,,,,,$34.80
+6-Oct,,,,,,$48.00,Dave,,48,Marto - Work for Alex,
+7-Oct,,,$200.00,,200,,,,,,
+8-Oct,,,,,,$24.00,Dave,,$24.00,Claude AI,$14.00
+9-Oct,,,,,,$25.00,Dave,,$25,Bolt.new,
+10-Oct,$400.00,Alex,$50.00,50,0,,,,,,
+11-Oct,,,$122.00,122,0,$20.00,Dave,,$20,n8n,
+12-Oct,,,,,,$18.00,Dave,,$18,Loom,$17.00
+13-Oct,$225.00,Wes,$56.50,0,28.88,,,,27.62,Bolt.new,
+14-Oct,$203.00,James (Twilio),$81.00,0,0,,,,$81,Marto,
+15-Oct,,,,,,,,,,,$17.40
+16-Oct,,,,,,$10.75,Dave,,,,$17.40
+17-Oct,,,,,,,,,,,$10.40
+18-Oct,,,,,,,,,10.75,Retell 17th,
+19-Oct,"$1,326.00",Jim,$100.00,0,0,,,,100,(Ian & Marto),
+20-Oct,,,,,,,,,,,
+21-Oct,,,$87.00,0,0,,,,$87,Skool,
+22-Oct,,,,,,$20.00,Dave,,20,Cursor,
+23-Oct,$14.00,AY Interview,$28.00,28,0,$0.00,,,28,Zoho,
+24-Oct,,,,,,,,,,,
+25-Oct,$44.00,James,$60.00,0,60,,,,,,$14.00
+26-Oct,"$1,237.60",Jim,$26.00,26,0,,,,,,
+27-Oct,,,$65.00,0,0,,,,65,"Biz expense (recording , bnb)",
+28-Oct,,,,,,,,,,,
+29-Oct,$567.00,Bree,$141.26,0,0,,,,141.26,($100) Marto & Ian ($41),
+30-Oct,,,$100.00,0,50,$14.00,Dave,,$50,Lazarus,
+31-Oct,$943.00,Bree,,,,,,,$14,Youtube Video ,
+Total,"$4,959.60",,"$1,126.76",$226.00,$338.88,$279.75,,,$869.57,,$159.40
+,,,,,,,,,,,
+Earnings,"$4,959.60",,Upwork Running Bal,"2,189.11","272,106.37",Kes,,,,,
+Expenses,$869.57,,Wise Running Bal,"$1,630.25","210,628.30",Kes,,,,,
+,,,,,,,,,,,
+Net Profit,"$4,090.03",,,,,,,,,,
+Withdrawals,"$1,126.76",,,,,,,,,,
+Balance in Accounts,"$2,963.27",,,,,,,,,,
+,,,,,,,,,,,
+Sent to Randy,$338.88,,,,,,,,,,
+Sent to Dave,$226.00,,,,,,,,,,
+Payable to Randy,"$1,566.26",,,,,,,,,,
+Payable to Dave,"$1,958.89",,,,,,,,,,
+Total,"$4,090.03",,,,,,,,,,
+,,,,,,,,,,,
+Send to Dave (Debt) -  Inclusive Sep,$344.73,CLEARED,,,,,,,,,

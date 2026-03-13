@@ -405,6 +405,7 @@ export default function People() {
                             <label className="form-label">Payment Type</label>
                             <select name="payment_type" className="form-select" value={formData.payment_type} onChange={handleFormChange}>
                                 <option value="Per Project">Per Project</option>
+                                <option value="Salary">Salary</option>
                             </select>
                         </div>
                     </div>
