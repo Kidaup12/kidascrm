@@ -113,6 +113,8 @@ export default function Projects() {
         setAssignFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const [isAssigning, setIsAssigning] = useState(false);
+
     const openAddModal = () => {
         setCurrentProject(null);
         setFormData({ project_name: '', client_id: '', platform: 'Upwork', status: 'Active', total_agreed_amount: '', notes: '' });
@@ -182,6 +184,8 @@ export default function Projects() {
         }
     };
 
+    const [confirmRemoveDev, setConfirmRemoveDev] = useState(null); // {projectId, personId, name}
+
     const openViewModal = async (id) => {
         try {
             const project = await db.projects.getById(id);
@@ -211,6 +215,27 @@ export default function Projects() {
         setIsAssignModalOpen(true);
     };
 
+    const openEditAssignModal = (dp) => {
+        setAssignFormData({ project_id: viewData.project.id, person_id: dp.person_id, agreed_amount: dp.agreed_amount });
+        setIsAssignModalOpen(true);
+    };
+
+    const handleConfirmRemoveDev = (dp) => {
+        setConfirmRemoveDev({ projectId: viewData.project.id, person_id: dp.person_id, name: dp.person_name });
+    };
+
+    const handleRemoveDeveloper = async () => {
+        if (!confirmRemoveDev) return;
+        try {
+            await db.projectDevelopers.remove(confirmRemoveDev.projectId, confirmRemoveDev.person_id);
+            setConfirmRemoveDev(null);
+            openViewModal(viewData.project.id);
+        } catch (error) {
+            console.error('Error removing developer:', error);
+            alert('Failed to remove developer');
+        }
+    };
+
     const handleAssignDeveloper = async () => {
         if (!assignFormData.person_id || !assignFormData.agreed_amount) {
             alert('Developer and agreed amount are required');
@@ -218,12 +243,15 @@ export default function Projects() {
         }
 
         try {
+            setIsAssigning(true);
             await db.projectDevelopers.assign(assignFormData.project_id, assignFormData.person_id, Number(assignFormData.agreed_amount));
             setIsAssignModalOpen(false);
             openViewModal(assignFormData.project_id); // refresh view data
         } catch (error) {
             console.error('Error assigning developer:', error);
             alert('Failed to assign developer');
+        } finally {
+            setIsAssigning(false);
         }
     };
 
@@ -528,6 +556,7 @@ export default function Projects() {
                                                 <th className="text-right">Remaining</th>
                                                 <th>Progress</th>
                                                 <th>Status</th>
+                                                <th className="text-right">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -553,6 +582,16 @@ export default function Projects() {
                                                             {percent >= 100
                                                                 ? <span className="badge badge-success">✓ Paid</span>
                                                                 : <span className="badge badge-warning">Pending</span>}
+                                                        </td>
+                                                        <td className="text-right">
+                                                            <div className="flex gap-xs justify-end">
+                                                                <button className="btn btn-sm btn-ghost" onClick={() => openEditAssignModal(dp)} title="Edit Assignment">
+                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                                                                </button>
+                                                                <button className="btn btn-sm btn-ghost text-error" onClick={() => handleConfirmRemoveDev(dp)} title="Remove Assignment">
+                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 );
@@ -610,19 +649,28 @@ export default function Projects() {
             <Modal
                 isOpen={isAssignModalOpen}
                 onClose={() => setIsAssignModalOpen(false)}
-                title="Assign Developer"
+                title={assignFormData.person_id && viewData.devPayments?.some(p => p.person_id === assignFormData.person_id) ? 'Edit Assignment' : 'Assign Developer'}
                 maxWidth="400px"
                 footerActions={
                     <>
-                        <button className="btn btn-secondary" onClick={() => setIsAssignModalOpen(false)}>Cancel</button>
-                        <button className="btn btn-primary" onClick={handleAssignDeveloper}>Assign</button>
+                        <button className="btn btn-secondary" onClick={() => setIsAssignModalOpen(false)} disabled={isAssigning}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleAssignDeveloper} disabled={isAssigning}>
+                            {isAssigning ? 'Saving...' : 'Save'}
+                        </button>
                     </>
                 }
             >
                 <form id="assignDevForm" onSubmit={e => e.preventDefault()}>
                     <div className="form-group">
                         <label className="form-label">Developer *</label>
-                        <select name="person_id" className="form-select" value={assignFormData.person_id} onChange={handleAssignFormChange} required>
+                        <select 
+                            name="person_id" 
+                            className="form-select" 
+                            value={assignFormData.person_id} 
+                            onChange={handleAssignFormChange} 
+                            required
+                            disabled={assignFormData.person_id && viewData.devPayments?.some(p => p.person_id === assignFormData.person_id)}
+                        >
                             <option value="">Select developer...</option>
                             {peopleData.map(p => (
                                 <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
@@ -642,6 +690,16 @@ export default function Projects() {
                 onConfirm={confirmDeleteProject}
                 title="Delete Project"
                 message="Are you sure you want to delete this project? This will also delete all associated transactions."
+            />
+
+            <ConfirmModal
+                isOpen={!!confirmRemoveDev}
+                onClose={() => setConfirmRemoveDev(null)}
+                onConfirm={handleRemoveDeveloper}
+                title="Remove Developer"
+                message={`Are you sure you want to remove ${confirmRemoveDev?.name} from this project?`}
+                confirmText="Remove"
+                confirmColor="btn-error"
             />
         </>
     );

@@ -28,6 +28,7 @@ export default function Debts() {
     const [modalError, setModalError] = useState('');
     const [saving, setSaving] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+    const [confirmMarkPaidId, setConfirmMarkPaidId] = useState(null);
 
     const loadDebts = async () => {
         setLoading(true);
@@ -107,16 +108,33 @@ export default function Debts() {
     };
 
     const handleMarkPaid = (id) => {
-        setConfirmDeleteId(id);
+        setConfirmMarkPaidId(id);
     };
 
     const confirmMarkPaid = async () => {
-        if (!confirmDeleteId) return;
+        if (!confirmMarkPaidId) return;
         try {
-            await db.debts.markPaid(confirmDeleteId);
+            await db.debts.markPaid(confirmMarkPaidId);
             loadDebts();
         } catch (error) {
             console.error('Error marking paid:', error);
+        } finally {
+            setConfirmMarkPaidId(null);
+        }
+    };
+
+    const handleDeleteDebt = (id) => {
+        setConfirmDeleteId(id);
+    };
+
+    const confirmDeleteDebt = async () => {
+        if (!confirmDeleteId) return;
+        try {
+            await db.debts.delete(confirmDeleteId);
+            loadDebts();
+        } catch (error) {
+            console.error('Error deleting debt:', error);
+            alert('Failed to delete debt entry');
         } finally {
             setConfirmDeleteId(null);
         }
@@ -229,6 +247,9 @@ export default function Debts() {
                                                     <button className="btn btn-sm btn-ghost" onClick={() => openEditModal(debt)} title="Edit">
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                                     </button>
+                                                    <button className="btn btn-sm btn-ghost text-error" onClick={() => handleDeleteDebt(debt.id)} title="Delete">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                                    </button>
                                                     <button className="btn btn-sm btn-primary" onClick={() => handleMarkPaid(debt.id)}>
                                                         Mark Paid
                                                     </button>
@@ -298,13 +319,23 @@ export default function Debts() {
             </Modal>
 
             <ConfirmModal
-                isOpen={!!confirmDeleteId}
-                onClose={() => setConfirmDeleteId(null)}
+                isOpen={!!confirmMarkPaidId}
+                onClose={() => setConfirmMarkPaidId(null)}
                 onConfirm={confirmMarkPaid}
                 title="Mark Paid"
                 message="Are you sure you want to mark this obligation as paid? This will create a completed transaction."
                 confirmText="Mark Paid"
                 confirmColor="btn-success"
+            />
+
+            <ConfirmModal
+                isOpen={!!confirmDeleteId}
+                onClose={() => setConfirmDeleteId(null)}
+                onConfirm={confirmDeleteDebt}
+                title="Delete Debt Entry"
+                message="Are you sure you want to delete this debt entry? This action cannot be undone."
+                confirmText="Delete"
+                confirmColor="btn-error"
             />
         </>
     );
