@@ -71,7 +71,7 @@ export const getStatusBadge = (status) => {
 };
 
 export const getPlatformBadge = (platform) => {
-    const badges = { 'Upwork': 'badge-upwork', 'Bank': 'badge-bank', 'Wise': 'badge-wise' };
+    const badges = { 'Upwork': 'badge-upwork', 'Bank': 'badge-bank', 'Wise': 'badge-wise', 'Till': 'badge-till' };
     return badges[platform] || 'badge-neutral';
 };
 

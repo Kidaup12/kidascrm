@@ -77,6 +77,8 @@ export default function Transactions() {
     const [transactionsData, setTransactionsData] = useState([]);
     const [projectsData, setProjectsData] = useState([]);
     const [peopleData, setPeopleData] = useState([]);
+    const [tillsData, setTillsData] = useState([]);
+    const [tillSupport, setTillSupport] = useState(false);
     const [loading, setLoading] = useState(true);
 
     // Filter State
@@ -103,6 +105,7 @@ export default function Transactions() {
         date: new Date().toISOString().split('T')[0],
         type: 'Revenue',
         account: 'Upwork',
+        till_id: '',
         project_id: '',
         person_id: '',
         description: '',
@@ -120,6 +123,7 @@ export default function Transactions() {
         date: '',
         type: '',
         account: '',
+        till_id: '',
         project_id: '',
         person_id: '',
         description: '',
@@ -179,6 +183,28 @@ export default function Transactions() {
             ]);
             setProjectsData(projects);
             setPeopleData(people);
+
+            const tillResult = await db.tills.getAll();
+            if (tillResult.supported) {
+                const tillColumnSupported = await db.transactions.hasTillColumn();
+                if (tillColumnSupported) {
+                    setTillSupport(true);
+                    let tills = tillResult.data;
+                    if (tills.length === 0) {
+                        const defaultTill = await db.tills.getOrCreate('Till');
+                        if (defaultTill.supported && defaultTill.data) {
+                            tills = [defaultTill.data];
+                        }
+                    }
+                    setTillsData(tills);
+                } else {
+                    setTillSupport(false);
+                    setTillsData([]);
+                }
+            } else {
+                setTillSupport(false);
+                setTillsData([]);
+            }
             // Transactions will be loaded via effect on selectedMonth
         } catch (error) {
             console.error('Error loading initial data:', error);
@@ -274,11 +300,19 @@ export default function Transactions() {
     // Form Change Handlers
     const handleFormChange = (e) => {
         const { name, value } = e.target;
+        if (name === 'account' && value !== 'Till') {
+            setFormData(prev => ({ ...prev, account: value, till_id: '' }));
+            return;
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const handleQuickAddChange = (e) => {
         const { name, value } = e.target;
+        if (name === 'account' && value !== 'Till') {
+            setQuickAdd(prev => ({ ...prev, account: value, till_id: '' }));
+            return;
+        }
         setQuickAdd(prev => ({ ...prev, [name]: value }));
     };
 
@@ -345,6 +379,7 @@ export default function Transactions() {
         setFormData({
             date: new Date().toISOString().split('T')[0],
             type: 'Revenue', account: 'Upwork',
+            till_id: '',
             project_id: '', person_id: '', description: '',
             payment_status: 'Completed', amount: '', amountDave: '', amountRandy: '',
             currency: 'USD', billing_type: 'One-off'
@@ -358,6 +393,7 @@ export default function Transactions() {
             date: tx.date || '',
             type: tx.type || 'Revenue',
             account: tx.account || 'Upwork',
+            till_id: tx.till_id || '',
             project_id: tx.project_id || '',
             person_id: tx.person_id || '',
             description: tx.description || '',
@@ -465,6 +501,10 @@ export default function Transactions() {
                     billing_type: dataToSave.billing_type || null
                 };
 
+                if (tillSupport) {
+                    payload.till_id = dataToSave.till_id || null;
+                }
+
                 if (currentTransaction && !isQuickAdd) {
                     await db.transactions.update(currentTransaction.id, payload);
                 } else {
@@ -491,7 +531,7 @@ export default function Transactions() {
         const success = await handleSaveTransaction(quickAdd, true);
         if (success) {
             setQuickAdd({
-                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Completed', amount: '', amountDave: '', amountRandy: '', billing_type: 'One-off', currency: 'USD'
+                date: '', type: '', account: '', till_id: '', project_id: '', person_id: '', description: '', payment_status: 'Completed', amount: '', amountDave: '', amountRandy: '', billing_type: 'One-off', currency: 'USD'
             });
             document.getElementById('quickDate')?.focus();
         }
@@ -503,7 +543,7 @@ export default function Transactions() {
             saveQuickTransaction();
         } else if (e.key === 'Escape') {
             setQuickAdd({
-                date: '', type: '', account: '', project_id: '', person_id: '', description: '', payment_status: 'Paid', amount: '', amountDave: '', amountRandy: '', billing_type: 'One-off', currency: 'USD'
+                date: '', type: '', account: '', till_id: '', project_id: '', person_id: '', description: '', payment_status: 'Paid', amount: '', amountDave: '', amountRandy: '', billing_type: 'One-off', currency: 'USD'
             });
         }
     };
@@ -646,6 +686,7 @@ export default function Transactions() {
                                 <th>Date</th>
                                 <th>Type</th>
                                 <th>Account</th>
+                                <th>Till</th>
                                 <th>Project</th>
                                 <th>Person</th>
                                 <th>Description</th>
@@ -684,6 +725,16 @@ export default function Transactions() {
                                         <option value="Wise">Wise</option>
                                         <option value="Till">Till</option>
                                     </select>
+                                </td>
+                                <td>
+                                    {quickAdd.account === 'Till' && tillSupport ? (
+                                        <select name="till_id" className="inline-select" value={quickAdd.till_id} onChange={handleQuickAddChange}>
+                                            <option value="">Select till...</option>
+                                            {tillsData.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                    ) : (
+                                        <span className="text-muted">-</span>
+                                    )}
                                 </td>
                                 <td>
                                     <ProjectSearchSelect 
@@ -729,7 +780,7 @@ export default function Transactions() {
 
                             {loading ? (
                                 <tr>
-                                    <td colSpan="9">
+                                    <td colSpan="10">
                                         <div className="empty-state">
                                             <div className="animate-pulse">Loading transactions...</div>
                                         </div>
@@ -737,7 +788,7 @@ export default function Transactions() {
                                 </tr>
                             ) : paginatedData.length === 0 ? (
                                 <tr>
-                                    <td colSpan="9">
+                                    <td colSpan="10">
                                         <div className="empty-state">
                                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="empty-state-icon">
                                                 <line x1="12" y1="1" x2="12" y2="23" />
@@ -759,6 +810,7 @@ export default function Transactions() {
                                             </div>
                                         </td>
                                         <td><Badge className={getPlatformBadge(tx.account)}>{tx.account}</Badge></td>
+                                        <td>{tx.till_id ? (tillsData.find(t => t.id === tx.till_id)?.name || tx.till_id) : '-'}</td>
                                         <td>{tx.projects?.project_name || '-'}</td>
                                         <td>{tx.people?.name || '-'}</td>
                                         <td className="text-muted">{tx.description || '-'}</td>
@@ -891,6 +943,16 @@ export default function Transactions() {
                             className="form-input"
                         />
                     </div>
+
+                    {formData.account === 'Till' && tillSupport && (
+                        <div className="form-group">
+                            <label className="form-label">Till <span className="text-muted">(Optional)</span></label>
+                            <select name="till_id" className="form-select" value={formData.till_id} onChange={handleFormChange}>
+                                <option value="">Select till...</option>
+                                {tillsData.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                        </div>
+                    )}
 
                     {showPersonModal && (
                         <div className="form-group">

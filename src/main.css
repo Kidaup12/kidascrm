@@ -1259,6 +1259,11 @@ h6 {
     color: var(--color-primary-dark);
 }
 
+.badge-till {
+    background: rgba(245, 166, 35, 0.1);
+    color: #E67E22;
+}
+
 /* ================================
    Progress Bar
    ================================ */

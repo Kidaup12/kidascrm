@@ -5,6 +5,10 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const isMissingTableError = (error) => {
+    return error?.code === 'PGRST205' || error?.message?.includes('Could not find the table');
+};
+
 export const db = {
     clients: {
         async getAll() {
@@ -111,6 +115,45 @@ export const db = {
             if (error) throw error;
         }
     },
+    tills: {
+        async getAll() {
+            try {
+                const { data, error } = await supabaseClient.from('tills').select('*').order('name');
+                if (error) throw error;
+                return { data: data || [], supported: true };
+            } catch (error) {
+                if (isMissingTableError(error)) return { data: [], supported: false };
+                throw error;
+            }
+        },
+        async create(till) {
+            try {
+                const { data, error } = await supabaseClient.from('tills').insert(till).select().single();
+                if (error) throw error;
+                return data;
+            } catch (error) {
+                if (isMissingTableError(error)) return null;
+                throw error;
+            }
+        },
+        async getByName(name) {
+            try {
+                const { data, error } = await supabaseClient.from('tills').select('*').eq('name', name).limit(1);
+                if (error) throw error;
+                return { data: data || [], supported: true };
+            } catch (error) {
+                if (isMissingTableError(error)) return { data: [], supported: false };
+                throw error;
+            }
+        },
+        async getOrCreate(name) {
+            const result = await this.getByName(name);
+            if (!result.supported) return { data: null, supported: false };
+            if (result.data.length > 0) return { data: result.data[0], supported: true };
+            const created = await this.create({ name });
+            return { data: created, supported: true };
+        }
+    },
     projectDevelopers: {
         async assign(projectId, personId, agreedAmount) {
             const { data, error } = await supabaseClient.from('project_developers').upsert({ project_id: projectId, person_id: personId, agreed_amount: agreedAmount }).select().single();
@@ -131,7 +174,7 @@ export const db = {
     },
     transactions: {
         async getAll(filters = {}) {
-            let query = supabaseClient.from('transactions').select('*, projects(project_name), people(name)').order('date', { ascending: false });
+            let query = supabaseClient.from('transactions').select('*, projects(project_name), people(name)');
             if (filters.startDate) query = query.gte('date', filters.startDate);
             if (filters.endDate) query = query.lte('date', filters.endDate);
             if (filters.type) query = query.eq('type', filters.type);
@@ -140,6 +183,9 @@ export const db = {
             if (filters.personId) query = query.eq('person_id', filters.personId);
             if (filters.paymentStatus) query = query.eq('payment_status', filters.paymentStatus);
             if (filters.billingType) query = query.eq('billing_type', filters.billingType);
+            
+            query = query.order('date', { ascending: false });
+            
             const { data, error } = await query;
             if (error) throw error; return data || [];
         },
@@ -151,10 +197,19 @@ export const db = {
             const { data, error } = await supabaseClient.from('transactions').select('*, projects(project_name)').eq('person_id', personId).order('date', { ascending: false });
             if (error) throw error; return data || [];
         },
+        async hasTillColumn() {
+            const { error } = await supabaseClient.from('transactions').select('till_id').limit(1);
+            if (error) {
+                if (error.code === '42703') return false;
+                throw error;
+            }
+            return true;
+        },
         async create(transaction) {
             const { data, error } = await supabaseClient.from('transactions').insert(transaction).select().single();
             if (error) throw error; return data;
         },
+
         async update(id, transaction) {
             const { data, error } = await supabaseClient.from('transactions').update({ ...transaction, updated_at: new Date().toISOString() }).eq('id', id).select().single();
             if (error) throw error; return data;
