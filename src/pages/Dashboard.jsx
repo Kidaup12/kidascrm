@@ -119,6 +119,9 @@ export default function Dashboard() {
     const kpis = data.kpis;
     const expensePercent = kpis.revenue > 0 ? ((kpis.totalExpenses / kpis.revenue) * 100).toFixed(1) : 0;
     const profitMargin = kpis.revenue > 0 ? ((kpis.profit / kpis.revenue) * 100).toFixed(1) : 0;
+    const withdrawalPercent = kpis.revenue > 0 ? ((kpis.founderWithdrawals / kpis.revenue) * 100).toFixed(1) : 0;
+    const totalBalance = Object.values(data.accountBalances).reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0);
+    const balancePercent = kpis.revenue > 0 ? ((totalBalance / kpis.revenue) * 100).toFixed(1) : 0;
 
     // Charts data
     const expenseChartData = {
@@ -163,6 +166,13 @@ export default function Dashboard() {
             }
         }
     };
+
+    const expenseCategories = data.expenseData.labels.map((label, index) => ({
+        label,
+        value: Number(data.expenseData.values[index] || 0)
+    }));
+    const sortedExpenseCategories = [...expenseCategories].sort((a, b) => b.value - a.value);
+    const expenseTotal = sortedExpenseCategories.reduce((sum, item) => sum + item.value, 0);
 
     const trendChartData = {
         labels: data.trendData.map(d => formatMonth(d.month)),
@@ -299,7 +309,19 @@ export default function Dashboard() {
                                 </div>
                                 <div className="kpi-value">{formatCurrency(kpis.founderWithdrawals)}</div>
                                 <div className="kpi-change">
-                                    <span>Founder distributions</span>
+                                    <span>{withdrawalPercent}% of revenue</span>
+                                </div>
+                            </div>
+                            <div className="kpi-card">
+                                <div className="kpi-card-header">
+                                    <span className="kpi-label">Balance</span>
+                                    <div className="kpi-icon profit">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v8m4-4H8" /></svg>
+                                    </div>
+                                </div>
+                                <div className="kpi-value">{formatCurrency(totalBalance)}</div>
+                                <div className="kpi-change">
+                                    <span>{balancePercent}% of revenue</span>
                                 </div>
                             </div>
                         </div>
@@ -353,8 +375,25 @@ export default function Dashboard() {
                             <div className="card">
                                 <div className="card-header"><h3 className="card-title">Expense Breakdown</h3></div>
                                 <div className="card-body">
-                                    <div className="chart-container" style={{ position: 'relative', height: '300px' }}>
-                                        <Bar data={expenseChartData} options={expenseChartOptions} />
+                                    <div style={{ marginBottom: '1rem', color: 'var(--color-text-secondary)', fontSize: '0.94rem' }}>
+                                        Expense categories sorted by amount.
+                                    </div>
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        {sortedExpenseCategories.length === 0 ? (
+                                            <p className="text-muted" style={{ margin: 0 }}>No expense categories available.</p>
+                                        ) : (
+                                            sortedExpenseCategories.map(item => (
+                                                <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center', marginBottom: '14px' }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '6px', color: '#111' }}>{item.label}</div>
+                                                        <div style={{ background: 'rgba(0,0,0,0.08)', borderRadius: '999px', height: '10px', overflow: 'hidden' }}>
+                                                            <div style={{ width: `${expenseTotal > 0 ? (item.value / expenseTotal) * 100 : 0}%`, height: '100%', background: 'rgba(0,0,0,0.55)', borderRadius: '999px' }} />
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ whiteSpace: 'nowrap', fontSize: '0.95rem', color: '#111' }}>{formatCurrency(item.value)}</div>
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -372,18 +411,21 @@ export default function Dashboard() {
                         {/* Summary Widgets */}
                         <div className="summary-grid">
                             <div className="summary-card">
-                                <div className="summary-card-header"><h4 className="card-title">Money Owed</h4></div>
+                                <div className="summary-card-header" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                                    <h4 className="card-title">Accounts Receivable / Payable</h4>
+                                    <div className="text-xs text-muted" style={{ marginTop: '6px' }}>Only worked out for this month.</div>
+                                </div>
                                 <div className="summary-item">
                                     <span className="summary-item-label">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00A876" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /></svg>
-                                        Clients owe us
+                                        Accounts Receivable
                                     </span>
                                     <span className="summary-item-value positive">{formatCurrency(data.moneyOwed.clientsOweUs)}</span>
                                 </div>
                                 <div className="summary-item">
                                     <span className="summary-item-label">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D32F2F" strokeWidth="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /></svg>
-                                        We owe contractors
+                                        Accounts Payable
                                     </span>
                                     <span className="summary-item-value negative">{formatCurrency(data.moneyOwed.weOweContractors)}</span>
                                 </div>
@@ -455,30 +497,10 @@ export default function Dashboard() {
                             </div>
 
                             <div className="summary-card">
-                                <div className="summary-card-header"><h4 className="card-title">Recurring Costs (Tools)</h4></div>
-                                <div>
-                                    {data.recurringCosts.length === 0 ? (
-                                        <div className="empty-state" style={{ padding: '24px' }}>
-                                            <p className="text-muted">No recurring tools found</p>
-                                        </div>
-                                    ) : (
-                                        data.recurringCosts.map(cost => {
-                                            const daysUntil = Math.ceil((new Date(cost.nextDueDate) - new Date()) / (1000 * 60 * 60 * 24));
-                                            return (
-                                                <div className="summary-item" key={cost.name}>
-                                                    <span className="summary-item-label" style={{maxWidth: '180px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-                                                        ★ {cost.name}
-                                                    </span>
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <div className="summary-item-value text-error">{formatCurrency(cost.amount)}</div>
-                                                        <div className="text-xs text-muted">
-                                                            Due: {formatDateShort(cost.nextDueDate)} <span className={daysUntil <= 5 ? "text-error" : ""}>({daysUntil > 0 ? `in ${daysUntil}d` : 'Soon'})</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })
-                                    )}
+                                <div className="summary-card-header"><h4 className="card-title">Recurring Costs</h4></div>
+                                <div className="summary-item">
+                                    <span className="summary-item-label">Expected recurring costs this period</span>
+                                    <span className="summary-item-value negative">{formatCurrency(data.mrrData.recurringCosts)}</span>
                                 </div>
                             </div>
                         </div>

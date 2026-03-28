@@ -24,11 +24,43 @@ export default function AccountReconciliation() {
     const [selectedMonth, setSelectedMonth] = useState(months[0].key);
     const [balances, setBalances] = useState({}); // { account: { opening_balance, closing_balance, is_locked } }
     const [calculated, setCalculated] = useState({}); // { account: net_from_transactions }
+    const [breakdowns, setBreakdowns] = useState({}); // { account: { moneyIn, moneyOut } }
+    const [expandedAccounts, setExpandedAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editAccount, setEditAccount] = useState(null);
     const [editFields, setEditFields] = useState({ opening_balance: '', closing_balance: '' });
     const [saving, setSaving] = useState(false);
+
+    const loadAccountBreakdowns = async (monthKey) => {
+        const [year, month] = monthKey.split('-');
+        const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+        const startDate = `${year}-${month}-01`;
+        const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+        const breakdownsResult = {};
+
+        await Promise.all(ACCOUNTS.map(async (account) => {
+            try {
+                const txs = await db.transactions.getAll({ startDate, endDate, account });
+                let moneyIn = 0;
+                let moneyOut = 0;
+                (txs || []).forEach(t => {
+                    const amt = parseFloat(t.amount) || 0;
+                    if (t.type === 'Revenue') {
+                        moneyIn += amt;
+                    } else {
+                        moneyOut += amt;
+                    }
+                });
+                breakdownsResult[account] = { moneyIn, moneyOut };
+            } catch (error) {
+                console.error(`Failed loading breakdown for ${account}`, error);
+                breakdownsResult[account] = { moneyIn: 0, moneyOut: 0 };
+            }
+        }));
+
+        return breakdownsResult;
+    };
 
     const load = async () => {
         setLoading(true);
@@ -43,6 +75,8 @@ export default function AccountReconciliation() {
             const calcMap = {};
             ACCOUNTS.forEach((a, i) => { calcMap[a] = calcs[i]; });
             setCalculated(calcMap);
+            const breakdownMap = await loadAccountBreakdowns(selectedMonth);
+            setBreakdowns(breakdownMap);
         } catch (e) {
             console.error('Account balance load error', e);
         } finally {
@@ -87,14 +121,20 @@ export default function AccountReconciliation() {
         <div className="card mb-lg">
             <div className="card-header" style={{ alignItems: 'center' }}>
                 <h3 className="card-title">Account Balance Reconciliation</h3>
-                <select
-                    className="form-select"
-                    style={{ width: 'auto', fontSize: '13px' }}
-                    value={selectedMonth}
-                    onChange={e => setSelectedMonth(e.target.value)}
-                >
-                    {months.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                </select>
+                <div className="month-picker-container" style={{ justifyContent: 'flex-end', flex: 1 }}>
+                    <div className="month-tabs" style={{ minWidth: 0, overflowX: 'auto' }}>
+                        {months.map(m => (
+                            <button
+                                key={m.key}
+                                type="button"
+                                className={`month-tab ${m.key === selectedMonth ? 'active' : ''}`}
+                                onClick={() => setSelectedMonth(m.key)}
+                            >
+                                {m.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
             <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
                 {loading ? (
@@ -122,33 +162,62 @@ export default function AccountReconciliation() {
                                 const diff = actual != null ? actual - expected : null;
                                 const locked = rec.is_locked;
                                 return (
-                                    <tr key={account}>
-                                        <td className="font-medium">{account}</td>
-                                        <td className="text-right">
-                                            {rec.opening_balance != null ? formatCurrency(opening) : <span className="text-muted">—</span>}
-                                            {locked && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--color-success)' }}>🔒</span>}
-                                        </td>
-                                        <td className="text-right" style={{ color: net >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
-                                            {net >= 0 ? '+' : ''}{formatCurrency(net)}
-                                        </td>
-                                        <td className="text-right font-medium">{formatCurrency(expected)}</td>
-                                        <td className="text-right">
-                                            {actual != null ? formatCurrency(actual) : <span className="text-muted">Not entered</span>}
-                                        </td>
-                                        <td className="text-right">
-                                            {diff != null ? (
-                                                <span style={{ color: Math.abs(diff) < 0.01 ? 'var(--color-success)' : diff > 0 ? 'var(--color-warning)' : 'var(--color-error)', fontWeight: 600 }}>
-                                                    {diff > 0 ? '+' : ''}{formatCurrency(diff)}
-                                                    {Math.abs(diff) < 0.01 && ' ✓'}
-                                                </span>
-                                            ) : <span className="text-muted">—</span>}
-                                        </td>
-                                        <td>
-                                            <button className="btn btn-sm btn-ghost" onClick={() => openEdit(account)}>
-                                                {rec.opening_balance != null || rec.closing_balance != null ? 'Edit' : 'Enter'}
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    <>
+                                        <tr key={account}>
+                                            <td className="font-medium">
+                                                <button className="btn btn-ghost" style={{ padding: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => {
+                                                    setExpandedAccounts(prev => prev.includes(account) ? prev.filter(a => a !== account) : [...prev, account]);
+                                                }}>
+                                                    {account}
+                                                    <span style={{ transform: expandedAccounts.includes(account) ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                                                        ▼
+                                                    </span>
+                                                </button>
+                                            </td>
+                                            <td className="text-right">
+                                                {rec.opening_balance != null ? formatCurrency(opening) : <span className="text-muted">—</span>}
+                                                {locked && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--color-success)' }}>🔒</span>}
+                                            </td>
+                                            <td className="text-right" style={{ color: net >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+                                                {net >= 0 ? '+' : ''}{formatCurrency(net)}
+                                            </td>
+                                            <td className="text-right font-medium">{formatCurrency(expected)}</td>
+                                            <td className="text-right">
+                                                {actual != null ? formatCurrency(actual) : <span className="text-muted">Not entered</span>}
+                                            </td>
+                                            <td className="text-right">
+                                                {diff != null ? (
+                                                    <span style={{ color: Math.abs(diff) < 0.01 ? 'var(--color-success)' : diff > 0 ? 'var(--color-warning)' : 'var(--color-error)', fontWeight: 600 }}>
+                                                        {diff > 0 ? '+' : ''}{formatCurrency(diff)}
+                                                        {Math.abs(diff) < 0.01 && ' ✓'}
+                                                    </span>
+                                                ) : <span className="text-muted">—</span>}
+                                            </td>
+                                            <td>
+                                                <button className="btn btn-sm btn-ghost" onClick={() => openEdit(account)}>
+                                                    {rec.opening_balance != null || rec.closing_balance != null ? 'Edit' : 'Enter'}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {expandedAccounts.includes(account) && (
+                                            <tr key={`${account}-details`}>
+                                                <td colSpan="7" style={{ padding: 0, borderTop: '0' }}>
+                                                    <div style={{ padding: '12px 16px', background: 'var(--color-bg-secondary)', borderTop: '1px solid var(--color-border)' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Money In</div>
+                                                                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-success)' }}>{formatCurrency(breakdowns[account]?.moneyIn || 0)}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Money Out</div>
+                                                                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-error)' }}>{formatCurrency(breakdowns[account]?.moneyOut || 0)}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </>
                                 );
                             })}
                         </tbody>
