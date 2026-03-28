@@ -120,7 +120,7 @@ export default function Dashboard() {
     const expensePercent = kpis.revenue > 0 ? ((kpis.totalExpenses / kpis.revenue) * 100).toFixed(1) : 0;
     const profitMargin = kpis.revenue > 0 ? ((kpis.profit / kpis.revenue) * 100).toFixed(1) : 0;
     const withdrawalPercent = kpis.revenue > 0 ? ((kpis.founderWithdrawals / kpis.revenue) * 100).toFixed(1) : 0;
-    const totalBalance = Object.values(data.accountBalances).reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0);
+    const totalBalance = kpis.revenue - kpis.totalExpenses - kpis.founderWithdrawals;
     const balancePercent = kpis.revenue > 0 ? ((totalBalance / kpis.revenue) * 100).toFixed(1) : 0;
 
     // Charts data
