@@ -1585,7 +1585,54 @@ h6 {
 /* ================================
    Responsive
    ================================ */
+.sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: var(--space-lg);
+    left: var(--space-lg);
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: var(--radius-xl);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-text-inverse);
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.sidebar-toggle:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.sidebar-toggle svg {
+    width: 20px;
+    height: 20px;
+}
+
+.sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-fast), visibility var(--transition-fast);
+    z-index: 90;
+}
+
+.sidebar-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+}
+
 @media (max-width: 1024px) {
+    .sidebar-toggle {
+        display: flex;
+    }
+
     .sidebar {
         transform: translateX(-100%);
         transition: transform var(--transition-base);
