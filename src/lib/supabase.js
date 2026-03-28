@@ -9,6 +9,37 @@ const isMissingTableError = (error) => {
     return error?.code === 'PGRST205' || error?.message?.includes('Could not find the table');
 };
 
+const isMissingRelationError = (error) => {
+    return isMissingTableError(error) || error?.code === '42703' || error?.message?.includes('does not exist');
+};
+
+const buildTransactionQuery = (filters = {}) => {
+    let query = supabaseClient.from('transactions');
+    if (filters.startDate) query = query.gte('date', filters.startDate);
+    if (filters.endDate) query = query.lte('date', filters.endDate);
+    if (filters.type) query = query.eq('type', filters.type);
+    if (filters.account) query = query.eq('account', filters.account);
+    if (filters.projectId) query = query.eq('project_id', filters.projectId);
+    if (filters.personId) query = query.eq('person_id', filters.personId);
+    if (filters.paymentStatus) query = query.eq('payment_status', filters.paymentStatus);
+    if (filters.billingType) query = query.eq('billing_type', filters.billingType);
+    return query.order('date', { ascending: false });
+};
+
+const selectTransactionRelated = '*, projects(project_name), people(name)';
+const selectTransactionRelatedWithTills = '*, projects(project_name), people(name), tills(name)';
+
+const queryTransactions = async (filters = {}) => {
+    const { data, error } = await buildTransactionQuery(filters).select(selectTransactionRelatedWithTills);
+    if (!error) return data || [];
+    if (isMissingRelationError(error)) {
+        const { data: fallback, error: fallbackError } = await buildTransactionQuery(filters).select(selectTransactionRelated);
+        if (fallbackError) throw fallbackError;
+        return fallback || [];
+    }
+    throw error;
+};
+
 export const db = {
     clients: {
         async getAll() {
@@ -174,28 +205,27 @@ export const db = {
     },
     transactions: {
         async getAll(filters = {}) {
-            let query = supabaseClient.from('transactions').select('*, projects(project_name), people(name)');
-            if (filters.startDate) query = query.gte('date', filters.startDate);
-            if (filters.endDate) query = query.lte('date', filters.endDate);
-            if (filters.type) query = query.eq('type', filters.type);
-            if (filters.account) query = query.eq('account', filters.account);
-            if (filters.projectId) query = query.eq('project_id', filters.projectId);
-            if (filters.personId) query = query.eq('person_id', filters.personId);
-            if (filters.paymentStatus) query = query.eq('payment_status', filters.paymentStatus);
-            if (filters.billingType) query = query.eq('billing_type', filters.billingType);
-            
-            query = query.order('date', { ascending: false });
-            
-            const { data, error } = await query;
-            if (error) throw error; return data || [];
+            return await queryTransactions(filters);
         },
         async getByProject(projectId) {
-            const { data, error } = await supabaseClient.from('transactions').select('*, people(name)').eq('project_id', projectId).order('date', { ascending: false });
-            if (error) throw error; return data || [];
+            const { data, error } = await supabaseClient.from('transactions').select('*, people(name), tills(name)').eq('project_id', projectId).order('date', { ascending: false });
+            if (!error) return data || [];
+            if (isMissingRelationError(error)) {
+                const { data: fallback, error: fallbackError } = await supabaseClient.from('transactions').select('*, people(name)').eq('project_id', projectId).order('date', { ascending: false });
+                if (fallbackError) throw fallbackError;
+                return fallback || [];
+            }
+            throw error;
         },
         async getByPerson(personId) {
-            const { data, error } = await supabaseClient.from('transactions').select('*, projects(project_name)').eq('person_id', personId).order('date', { ascending: false });
-            if (error) throw error; return data || [];
+            const { data, error } = await supabaseClient.from('transactions').select('*, projects(project_name), tills(name)').eq('person_id', personId).order('date', { ascending: false });
+            if (!error) return data || [];
+            if (isMissingRelationError(error)) {
+                const { data: fallback, error: fallbackError } = await supabaseClient.from('transactions').select('*, projects(project_name)').eq('person_id', personId).order('date', { ascending: false });
+                if (fallbackError) throw fallbackError;
+                return fallback || [];
+            }
+            throw error;
         },
         async hasTillColumn() {
             const { error } = await supabaseClient.from('transactions').select('till_id').limit(1);
