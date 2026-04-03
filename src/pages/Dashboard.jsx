@@ -51,7 +51,10 @@ export default function Dashboard() {
 
     const [selectedMonth, setSelectedMonth] = useState(thisMonth);
     const [selectedWeek, setSelectedWeek]   = useState(null); // {start, end, label}
-    
+    const [dateMode, setDateMode]           = useState('month'); // 'month' | 'custom'
+    const [customStart, setCustomStart]     = useState('');
+    const [customEnd, setCustomEnd]         = useState('');
+
     // Find where the current month is in the array, and put it near the end of the 5-item visible window
     const thisMonthIdx = ALL_MONTHS.indexOf(thisMonth);
     const initialScrollIdx = thisMonthIdx >= 0 ? Math.max(0, thisMonthIdx - 4) : Math.max(0, ALL_MONTHS.length - 5);
@@ -61,6 +64,9 @@ export default function Dashboard() {
 
     // Compute date range from selection
     const getRange = () => {
+        if (dateMode === 'custom' && customStart && customEnd) {
+            return { startDate: customStart, endDate: customEnd };
+        }
         if (selectedWeek) return { startDate: selectedWeek.start,  endDate: selectedWeek.end };
         // whole month
         const [y, m] = selectedMonth.split('-').map(Number);
@@ -73,7 +79,8 @@ export default function Dashboard() {
         kpis: { revenue: 0, profit: 0, totalExpenses: 0, founderWithdrawals: 0 },
         expenseData: { labels: [], values: [] },
         trendData: [],
-        founderBalances: { monthly: [], yearly: [] },
+        founderBalances: { founders: [], monthly: [], yearly: [] },
+        periodAccountBalances: { Upwork: 0, Wise: 0, Bank: 0, Till: 0 },
         moneyOwed: { clientsOweUs: 0, weOweContractors: 0 },
         recentTransactions: [],
         accountBalances: { Upwork: 0, Wise: 0, Bank: 0, Till: 0 },
@@ -82,9 +89,7 @@ export default function Dashboard() {
         newCounts: { newClients: 0, newProjects: 0 }
     });
 
-    const [founderView, setFounderView] = useState('Monthly');
-
-    const rangeKey = JSON.stringify({ selectedMonth, selectedWeek });
+    const rangeKey = JSON.stringify({ selectedMonth, selectedWeek, dateMode, customStart, customEnd });
 
     useEffect(() => {
         const loadData = async () => {
@@ -92,7 +97,7 @@ export default function Dashboard() {
             try {
                 const { startDate, endDate } = getRange();
 
-                const [kpis, expenseData, trendData, founderBalances, moneyOwed, recentTxs, accountBalances, recurringCosts, mrrData, newCounts] = await Promise.all([
+                const [kpis, expenseData, trendData, founderBalances, moneyOwed, recentTxs, accountBalances, periodAccountBalances, recurringCosts, mrrData, newCounts] = await Promise.all([
                     db.dashboard.getKPIs(startDate, endDate),
                     db.dashboard.getExpenseBreakdown(startDate, endDate),
                     db.dashboard.getMonthlyTrend(6),
@@ -100,12 +105,13 @@ export default function Dashboard() {
                     db.dashboard.getMoneyOwed(),
                     db.dashboard.getRecentTransactions(5),
                     db.dashboard.getAccountBalances(),
+                    db.dashboard.getAccountBalancesByPeriod(startDate, endDate),
                     db.dashboard.getRecurringCosts(),
                     db.dashboard.getMRRData(startDate, endDate),
                     db.dashboard.getNewCounts(startDate, endDate)
                 ]);
 
-                setData({ kpis, expenseData, trendData, founderBalances, moneyOwed, recentTransactions: recentTxs, accountBalances, recurringCosts, mrrData, newCounts });
+                setData({ kpis, expenseData, trendData, founderBalances, moneyOwed, recentTransactions: recentTxs, accountBalances, periodAccountBalances, recurringCosts, mrrData, newCounts });
             } catch (error) {
                 console.error('Dashboard error', error);
             } finally {
@@ -237,8 +243,8 @@ export default function Dashboard() {
                         </button>
                     </div>
 
-                    {/* Row 2: Weeks in selected month */}
-                    {weeks.length > 0 && (
+                    {/* Row 2: Weeks in selected month (only in month mode) */}
+                    {dateMode === 'month' && weeks.length > 0 && (
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: selectedWeek ? '10px' : 0 }}>
                             <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', alignSelf: 'center', marginRight: '4px' }}>Week:</span>
                             {weeks.map((w, i) => (
@@ -251,6 +257,23 @@ export default function Dashboard() {
                             ))}
                         </div>
                     )}
+
+                    {/* Row 3: Custom date range toggle */}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+                        <button
+                            className={`btn btn-sm ${dateMode === 'custom' ? 'btn-primary' : 'btn-ghost'}`}
+                            onClick={() => { setDateMode(dateMode === 'custom' ? 'month' : 'custom'); setSelectedWeek(null); }}
+                            style={{ fontSize: '12px' }}>
+                            Custom Range
+                        </button>
+                        {dateMode === 'custom' && (
+                            <>
+                                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="form-input" style={{ width: '145px', fontSize: '13px', padding: '4px 8px' }} />
+                                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>to</span>
+                                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="form-input" style={{ width: '145px', fontSize: '13px', padding: '4px 8px' }} />
+                            </>
+                        )}
+                    </div>
 
                 </div>
             </div>
@@ -413,45 +436,66 @@ export default function Dashboard() {
                             <div className="summary-card">
                                 <div className="summary-card-header" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                                     <h4 className="card-title">Accounts Receivable / Payable</h4>
-                                    <div className="text-xs text-muted" style={{ marginTop: '6px' }}>Only worked out for this month.</div>
                                 </div>
+                                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cumulative (All-time Outstanding)</div>
                                 <div className="summary-item">
                                     <span className="summary-item-label">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00A876" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /></svg>
-                                        Accounts Receivable
+                                        Clients Owe Us
                                     </span>
                                     <span className="summary-item-value positive">{formatCurrency(data.moneyOwed.clientsOweUs)}</span>
                                 </div>
                                 <div className="summary-item">
                                     <span className="summary-item-label">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D32F2F" strokeWidth="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /></svg>
-                                        Accounts Payable
+                                        We Owe Contractors
                                     </span>
                                     <span className="summary-item-value negative">{formatCurrency(data.moneyOwed.weOweContractors)}</span>
                                 </div>
                             </div>
 
                             <div className="summary-card">
-                                <div className="summary-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <h4 className="card-title" style={{ margin: 0 }}>Founder Balances</h4>
-                                    <div className="btn-group" style={{ display: 'flex', gap: '4px' }}>
-                                        <button className={`btn btn-xs ${founderView === 'Monthly' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFounderView('Monthly')}>Monthly</button>
-                                        <button className={`btn btn-xs ${founderView === 'Yearly' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFounderView('Yearly')}>Yearly</button>
+                                <div className="summary-card-header" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                                    <h4 className="card-title" style={{ margin: 0, marginBottom: '2px' }}>Founder Withdrawals</h4>
+                                </div>
+                                {/* Per founder: period + YTD */}
+                                {(data.founderBalances.founders || []).map(f => (
+                                    <div key={f.id} style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', marginBottom: '10px' }}>
+                                        <div style={{ fontWeight: 600, marginBottom: '6px', fontSize: '14px' }}>{f.name}</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>This period</div>
+                                            <div style={{ fontSize: '12px', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(f.periodWithdrawn)}</div>
+                                            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>YTD</div>
+                                            <div style={{ fontSize: '12px', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(f.ytdWithdrawn)}</div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="founder-widget" style={{ minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    {(!data.founderBalances[founderView.toLowerCase()] || data.founderBalances[founderView.toLowerCase()].length === 0) ? (
-                                        <p className="text-muted text-center" style={{ padding: '12px', margin: 0 }}>All settled up!</p>
-                                    ) : (
-                                        data.founderBalances[founderView.toLowerCase()].map(f => (
-                                            <div className="founder-card" key={f.id}>
-                                                <div className="founder-name">{f.name}</div>
-                                                <div className="founder-balance text-success">{formatCurrency(f.balance)}</div>
-                                                <div className="founder-label">owed</div>
+                                ))}
+                                {/* Owed section */}
+                                {(data.founderBalances.monthly || []).length > 0 && (
+                                    <div style={{ marginTop: '4px' }}>
+                                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Owed (Period)</div>
+                                        {data.founderBalances.monthly.map(f => (
+                                            <div className="summary-item" key={f.id}>
+                                                <span className="summary-item-label">{f.name}</span>
+                                                <span className="summary-item-value positive">{formatCurrency(f.balance)}</span>
                                             </div>
-                                        ))
-                                    )}
-                                </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {(data.founderBalances.yearly || []).length > 0 && (
+                                    <div style={{ marginTop: '8px' }}>
+                                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Owed (YTD)</div>
+                                        {data.founderBalances.yearly.map(f => (
+                                            <div className="summary-item" key={f.id}>
+                                                <span className="summary-item-label">{f.name}</span>
+                                                <span className="summary-item-value positive">{formatCurrency(f.balance)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {!(data.founderBalances.founders || []).length && (
+                                    <p className="text-muted text-center" style={{ padding: '12px', margin: 0 }}>No founders found</p>
+                                )}
                             </div>
 
                             <div className="summary-card">
@@ -481,19 +525,26 @@ export default function Dashboard() {
 
                             <div className="summary-card">
                                 <div className="summary-card-header"><h4 className="card-title">Account Balances</h4></div>
-                                <div>
-                                    {Object.entries(data.accountBalances).map(([account, balance]) => (
-                                        <div className="summary-item" key={account}>
-                                            <span className="summary-item-label">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
-                                                {account}
-                                            </span>
-                                            <span className={`summary-item-value ${balance >= 0 ? 'positive' : 'negative'}`}>
-                                                {formatCurrency(balance)}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>This Period (Net)</div>
+                                {Object.entries(data.periodAccountBalances || {}).map(([account, balance]) => (
+                                    <div className="summary-item" key={`period-${account}`}>
+                                        <span className="summary-item-label">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
+                                            {account}
+                                        </span>
+                                        <span className={`summary-item-value ${balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(balance)}</span>
+                                    </div>
+                                ))}
+                                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, margin: '10px 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cumulative (All-time)</div>
+                                {Object.entries(data.accountBalances).map(([account, balance]) => (
+                                    <div className="summary-item" key={`total-${account}`}>
+                                        <span className="summary-item-label">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
+                                            {account}
+                                        </span>
+                                        <span className={`summary-item-value ${balance >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(balance)}</span>
+                                    </div>
+                                ))}
                             </div>
 
                             <div className="summary-card">

@@ -37,32 +37,32 @@ const ProjectSearchSelect = ({ value, onChange, projects, className }) => {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
             {isOpen && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: '250px', overflowY: 'auto', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '4px', zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', textAlign: 'left', marginTop: '4px' }}>
-                    <div 
-                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, minWidth: '220px', maxHeight: '250px', overflowY: 'auto', background: '#fff', border: '1px solid #ccc', borderRadius: '4px', zIndex: 9999, boxShadow: '0 6px 16px rgba(0,0,0,0.18)', textAlign: 'left', marginTop: '4px' }}>
+                    <div
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #eee', background: '#fff' }}
                         onMouseDown={e => { e.preventDefault(); onChange(''); setIsOpen(false); }}
                     >
                         <span className="text-muted">No project</span>
                     </div>
-                    <div 
-                        style={{ padding: '8px 12px', cursor: 'pointer', color: 'var(--color-accent)', fontWeight: 600, borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+                    <div
+                        style={{ padding: '8px 12px', cursor: 'pointer', color: 'var(--color-accent)', fontWeight: 600, borderBottom: '1px solid #eee', background: '#fff' }}
                         onMouseDown={e => { e.preventDefault(); onChange('__ADD_NEW__'); setIsOpen(false); }}
                     >
                         + Add New Project
                     </div>
                     {filtered.map(p => (
-                        <div 
+                        <div
                             key={p.id}
-                            style={{ padding: '8px 12px', cursor: 'pointer', background: p.id === value ? 'var(--color-primary-light)' : 'var(--color-bg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            style={{ padding: '8px 12px', cursor: 'pointer', background: p.id === value ? '#e8f4fd' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                             onMouseDown={e => { e.preventDefault(); onChange(p.id); setIsOpen(false); }}
-                            onMouseEnter={e => e.currentTarget.style.filter = 'brightness(0.95)'}
-                            onMouseLeave={e => e.currentTarget.style.filter = 'none'}
+                            onMouseEnter={e => { if (p.id !== value) e.currentTarget.style.background = '#f5f5f5'; }}
+                            onMouseLeave={e => { if (p.id !== value) e.currentTarget.style.background = '#fff'; }}
                         >
                             {p.project_name}
                         </div>
                     ))}
                     {filtered.length === 0 && (
-                        <div style={{ padding: '8px 12px', color: 'var(--color-text-secondary)', background: 'var(--color-bg)' }}>No matches found</div>
+                        <div style={{ padding: '8px 12px', color: 'var(--color-text-secondary)', background: '#fff' }}>No matches found</div>
                     )}
                 </div>
             )}
@@ -93,6 +93,9 @@ export default function Transactions() {
     const [selectedMonth, setSelectedMonth] = useState('');
     const [availableMonths, setAvailableMonths] = useState([]);
     const [visibleMonthsWindow, setVisibleMonthsWindow] = useState([0, 5]);
+    const [dateMode, setDateMode] = useState('month'); // 'month' | 'custom'
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
@@ -214,10 +217,12 @@ export default function Transactions() {
     };
 
     useEffect(() => {
-        if (selectedMonth) {
+        if (dateMode === 'month' && selectedMonth) {
+            loadTransactions();
+        } else if (dateMode === 'custom' && customStartDate && customEndDate) {
             loadTransactions();
         }
-    }, [selectedMonth, typeFilter, accountFilter, statusFilter, billingTypeFilter, projectFilter]);
+    }, [selectedMonth, dateMode, customStartDate, customEndDate, typeFilter, accountFilter, statusFilter, billingTypeFilter, projectFilter]);
 
     // Filtering logic
     const filteredData = useMemo(() => {
@@ -246,7 +251,10 @@ export default function Transactions() {
         setLoading(true);
         try {
             let startDate, endDate;
-            if (selectedMonth) {
+            if (dateMode === 'custom' && customStartDate && customEndDate) {
+                startDate = customStartDate;
+                endDate = customEndDate;
+            } else if (selectedMonth) {
                 const [year, month] = selectedMonth.split('-');
                 startDate = `${year}-${month}-01`;
                 const lastDay = new Date(year, month, 0).getDate();
@@ -597,27 +605,47 @@ export default function Transactions() {
             </header>
 
             <div className="page-body">
-                {/* Month Picker */}
+                {/* Month / Custom Date Picker */}
                 <div className="card mb-md">
-                    <div className="card-body" style={{ padding: '16px 24px' }}>
-                        <div className="month-picker-container">
-                            <button className="btn btn-sm btn-ghost" onClick={() => changeMonthWindow(-1)} disabled={selectedIndex <= 0}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                            </button>
-                            <div className="month-tabs">
-                                {visibleMonths.map(month => {
-                                    const [year, mNum] = month.split('-');
-                                    const d = new Date(year, mNum - 1);
-                                    const monthName = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                                    return (
-                                        <button key={month} className={`month-tab ${month === selectedMonth ? 'active' : ''}`} onClick={() => handleMonthSelect(month)}>
-                                            {monthName}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            <button className="btn btn-sm btn-ghost" onClick={() => changeMonthWindow(1)} disabled={selectedIndex >= availableMonths.length - 1}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <div className="card-body" style={{ padding: '12px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            {/* Month tabs (only in month mode) */}
+                            {dateMode === 'month' && (
+                                <div className="month-picker-container" style={{ flex: 1 }}>
+                                    <button className="btn btn-sm btn-ghost" onClick={() => changeMonthWindow(-1)} disabled={selectedIndex <= 0}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </button>
+                                    <div className="month-tabs">
+                                        {visibleMonths.map(month => {
+                                            const [year, mNum] = month.split('-');
+                                            const d = new Date(year, mNum - 1);
+                                            const monthName = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                                            return (
+                                                <button key={month} className={`month-tab ${month === selectedMonth ? 'active' : ''}`} onClick={() => handleMonthSelect(month)}>
+                                                    {monthName}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <button className="btn btn-sm btn-ghost" onClick={() => changeMonthWindow(1)} disabled={selectedIndex >= availableMonths.length - 1}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    </button>
+                                </div>
+                            )}
+                            {/* Custom date range inputs */}
+                            {dateMode === 'custom' && (
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                                    <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="form-input" style={{ width: '145px' }} />
+                                    <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>to</span>
+                                    <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="form-input" style={{ width: '145px' }} />
+                                </div>
+                            )}
+                            {/* Toggle button */}
+                            <button
+                                className={`btn btn-sm ${dateMode === 'custom' ? 'btn-primary' : 'btn-ghost'}`}
+                                onClick={() => setDateMode(m => m === 'custom' ? 'month' : 'custom')}
+                                style={{ whiteSpace: 'nowrap' }}>
+                                {dateMode === 'custom' ? '✕ Custom' : 'Custom Range'}
                             </button>
                         </div>
                     </div>

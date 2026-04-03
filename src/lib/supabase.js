@@ -274,32 +274,35 @@ export const db = {
         async getFounderBalances(startDate, endDate) {
             const { data: founders, error: foundersError } = await supabaseClient.from('people').select('id, name').eq('role', 'Founder');
             if (foundersError) throw foundersError;
-            
-            // get month withdrawals
-            const { data: monthW } = await supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed').gte('date', startDate).lte('date', endDate);
-            
-            // get year withdrawals
+
             const yearStart = startDate.substring(0, 4) + '-01-01';
-            const yearEnd = startDate.substring(0, 4) + '-12-31';
-            const { data: yearW } = await supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed').gte('date', yearStart).lte('date', yearEnd);
+            const yearEnd   = startDate.substring(0, 4) + '-12-31';
 
-            const calcOwed = (withdrawals) => {
-                const totals = {};
-                (founders || []).forEach(f => totals[f.id] = 0);
-                (withdrawals || []).forEach(w => {
-                    if (totals[w.person_id] !== undefined) totals[w.person_id] += parseFloat(w.amount || 0);
-                });
-                const maxW = Math.max(...Object.values(totals), 0);
-                return (founders || []).map(f => {
-                    const w = totals[f.id];
-                    return { id: f.id, name: f.name, balance: maxW - w };
-                }).filter(f => f.balance > 0);
-            };
+            const [{ data: periodW }, { data: yearW }, { data: allW }] = await Promise.all([
+                supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed').gte('date', startDate).lte('date', endDate),
+                supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed').gte('date', yearStart).lte('date', yearEnd),
+                supabaseClient.from('transactions').select('person_id, amount').eq('type', 'Founder Withdrawal').eq('payment_status', 'Completed')
+            ]);
 
-            return {
-                monthly: calcOwed(monthW),
-                yearly: calcOwed(yearW)
-            };
+            const sum = (list, id) => (list || []).filter(w => w.person_id === id).reduce((s, w) => s + parseFloat(w.amount || 0), 0);
+
+            const details = (founders || []).map(f => ({
+                id: f.id,
+                name: f.name,
+                periodWithdrawn: sum(periodW, f.id),
+                ytdWithdrawn: sum(yearW, f.id),
+                totalWithdrawn: sum(allW, f.id)
+            }));
+
+            const maxPeriod = Math.max(...details.map(f => f.periodWithdrawn), 0);
+            const maxYtd    = Math.max(...details.map(f => f.ytdWithdrawn), 0);
+
+            const monthly = details.filter(f => maxPeriod - f.periodWithdrawn > 0.005)
+                .map(f => ({ ...f, balance: maxPeriod - f.periodWithdrawn }));
+            const yearly  = details.filter(f => maxYtd - f.ytdWithdrawn > 0.005)
+                .map(f => ({ ...f, balance: maxYtd - f.ytdWithdrawn }));
+
+            return { founders: details, monthly, yearly };
         },
         async getMoneyOwed() {
             const { data: projectsData, error: projectsError } = await supabaseClient.from('project_financials').select('amount_owed').gt('amount_owed', 0);
@@ -338,6 +341,21 @@ export const db = {
         },
         async getAccountBalances() {
             const { data, error } = await supabaseClient.from('transactions').select('type, account, amount');
+            if (error) throw error;
+            const balances = { Upwork: 0, Wise: 0, Bank: 0, Till: 0 };
+            (data || []).forEach(t => {
+                const acc = t.account;
+                if (balances[acc] !== undefined) {
+                    const amount = parseFloat(t.amount) || 0;
+                    if (t.type === 'Revenue') { balances[acc] += amount; } else { balances[acc] -= amount; }
+                }
+            });
+            return balances;
+        },
+        async getAccountBalancesByPeriod(startDate, endDate) {
+            const { data, error } = await supabaseClient.from('transactions')
+                .select('type, account, amount')
+                .gte('date', startDate).lte('date', endDate);
             if (error) throw error;
             const balances = { Upwork: 0, Wise: 0, Bank: 0, Till: 0 };
             (data || []).forEach(t => {

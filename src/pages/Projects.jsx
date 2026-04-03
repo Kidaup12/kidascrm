@@ -20,7 +20,8 @@ export default function Projects() {
     // Filters State
     const [statusFilter, setStatusFilter] = useState('');
     const [platformFilter, setPlatformFilter] = useState('');
-    const [monthFilter, setMonthFilter] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -75,23 +76,14 @@ export default function Projects() {
         }
     };
 
-    // Extract unique months from projects data for filtering
-    const monthOptions = Array.from(new Set(projectsData.map(p => {
-        if (!p.created_at) return null;
-        const d = new Date(p.created_at);
-        return `${d.toLocaleString('default', { month: 'long' })} ${d.getFullYear()}`;
-    }).filter(Boolean)));
-
     let displayProjects = [...projectsData];
     if (statusFilter) displayProjects = displayProjects.filter(p => p.status === statusFilter);
     if (platformFilter) displayProjects = displayProjects.filter(p => p.platform === platformFilter);
-    if (monthFilter) {
-        displayProjects = displayProjects.filter(p => {
-            if (!p.created_at) return false;
-            const d = new Date(p.created_at);
-            const pMonth = `${d.toLocaleString('default', { month: 'long' })} ${d.getFullYear()}`;
-            return pMonth === monthFilter;
-        });
+    if (dateFrom) {
+        displayProjects = displayProjects.filter(p => p.created_at && p.created_at.slice(0, 10) >= dateFrom);
+    }
+    if (dateTo) {
+        displayProjects = displayProjects.filter(p => p.created_at && p.created_at.slice(0, 10) <= dateTo);
     }
 
     if (searchTerm) {
@@ -188,20 +180,42 @@ export default function Projects() {
 
     const openViewModal = async (id) => {
         try {
-            const project = await db.projects.getById(id);
-            const devPayments = await db.projects.getDeveloperPayments(id);
-            const transactions = await db.transactions.getByProject(id);
+            const [project, transactions] = await Promise.all([
+                db.projects.getById(id),
+                db.transactions.getByProject(id)
+            ]);
 
-            const profit = parseFloat(transactions.filter(t => t.type === 'Revenue').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)) -
-                parseFloat(transactions.filter(t => t.type !== 'Revenue').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0));
+            // Try the view first; fall back to manual computation if it doesn't exist
+            let devPayments = [];
+            try {
+                devPayments = await db.projects.getDeveloperPayments(id);
+            } catch {
+                const devs = await db.projectDevelopers.getByProject(id);
+                devPayments = devs.map(d => {
+                    const paid = transactions
+                        .filter(t => t.person_id === d.person_id && ['Dev Payment'].includes(t.type) && t.payment_status === 'Completed')
+                        .reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+                    const agreed = parseFloat(d.agreed_amount || 0);
+                    return {
+                        person_id: d.person_id,
+                        person_name: d.people?.name || 'Unknown',
+                        agreed_amount: agreed,
+                        total_paid: paid,
+                        balance: agreed - paid
+                    };
+                });
+            }
+
+            const revenue = transactions.filter(t => t.type === 'Revenue').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+            const costs   = transactions.filter(t => t.type !== 'Revenue').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+            const profit  = revenue - costs;
 
             setViewData({ project, devPayments, transactions, profit });
-
-            // update URL
             router.replace(`?id=${id}`, { scroll: false });
             setIsViewModalOpen(true);
         } catch (error) {
             console.error('Error viewing project:', error);
+            alert('Failed to load project: ' + (error.message || 'Unknown error'));
         }
     };
 
@@ -268,12 +282,14 @@ export default function Projects() {
                         placeholder="Search projects..."
                         style={{ width: '200px' }}
                     />
-                    <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
-                        <option value="">All Months</option>
-                        {monthOptions.map(m => (
-                            <option key={m} value={m}>{m}</option>
-                        ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input" style={{ width: '140px' }} title="From date" />
+                        <span style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>–</span>
+                        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-input" style={{ width: '140px' }} title="To date" />
+                        {(dateFrom || dateTo) && (
+                            <button className="btn btn-sm btn-ghost" onClick={() => { setDateFrom(''); setDateTo(''); }} title="Clear dates">✕</button>
+                        )}
+                    </div>
                     <select value={platformFilter} onChange={e => setPlatformFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
                         <option value="">All Platforms</option>
                         <option value="Upwork">Upwork</option>
@@ -608,7 +624,7 @@ export default function Projects() {
                         <div className="card">
                             <div className="card-header">
                                 <h4 className="card-title">Transactions</h4>
-                                <Link to={`/transactions?project=${viewData.project.id}`} className="btn btn-sm btn-ghost">Add Transaction</Link>
+                                <Link href={`/transactions?project=${viewData.project.id}`} className="btn btn-sm btn-ghost">Add Transaction</Link>
                             </div>
                             <div className="card-body">
                                 {viewData.transactions && viewData.transactions.length > 0 ? (

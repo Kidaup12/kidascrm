@@ -21,7 +21,8 @@ export default function People() {
 
     // View Modal State
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-    const [viewData, setViewData] = useState({ person: null, transactions: [], totalPaid: 0, totalPending: 0 });
+    const [viewData, setViewData] = useState({ person: null, transactions: [], totalPaid: 0, totalPending: 0, projectsOverview: [] });
+    const [peopleViewTab, setPeopleViewTab] = useState('transactions'); // 'transactions' | 'projects'
     const [contractorOwed, setContractorOwed] = useState([]);
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
@@ -140,29 +141,42 @@ export default function People() {
 
     const openViewModal = async (id) => {
         try {
-            const person = await db.people.getById(id);
-            const transactions = await db.transactions.getByPerson(id);
-            const assignedProjects = await db.projectDevelopers.getByPerson(id);
+            const [person, transactions, assignedProjects, allProjectFinancials] = await Promise.all([
+                db.people.getById(id),
+                db.transactions.getByPerson(id),
+                db.projectDevelopers.getByPerson(id),
+                db.projects.getWithFinancials()
+            ]);
 
-            const totalPaid = transactions.filter(t => t.payment_status === 'Completed').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+            const totalPaid    = transactions.filter(t => t.payment_status === 'Completed').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
             const totalPending = transactions.filter(t => t.payment_status === 'Pending').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-            
-            // Build projects overview
+
+            // Build projects overview with client payment status
             const projectsOverview = assignedProjects.map(ap => {
-                const paidForThisProject = transactions
+                const pf = allProjectFinancials.find(p => p.id === ap.project_id) || {};
+                const devPaid = transactions
                     .filter(t => t.project_id === ap.project_id && t.payment_status === 'Completed')
                     .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-                
+                const devAgreed     = parseFloat(ap.agreed_amount || 0);
+                const clientAgreed  = parseFloat(pf.total_agreed_amount || 0);
+                const clientReceived = parseFloat(pf.total_received || 0);
                 return {
                     id: ap.project_id,
-                    name: ap.projects?.project_name || 'Unknown',
-                    agreed: parseFloat(ap.agreed_amount || 0),
-                    paid: paidForThisProject,
-                    remaining: parseFloat(ap.agreed_amount || 0) - paidForThisProject
+                    name: pf.project_name || ap.projects?.project_name || 'Unknown',
+                    clientName: pf.client_name || '-',
+                    status: pf.status || '',
+                    devAgreed,
+                    devPaid,
+                    devRemaining: devAgreed - devPaid,
+                    clientAgreed,
+                    clientReceived,
+                    clientOwed: Math.max(0, clientAgreed - clientReceived),
+                    projectTransactions: transactions.filter(t => t.project_id === ap.project_id)
                 };
             });
 
             setViewData({ person, transactions, totalPaid, totalPending, projectsOverview });
+            setPeopleViewTab('transactions');
             setIsViewModalOpen(true);
         } catch (error) {
             console.error('Error viewing person:', error);
@@ -434,97 +448,192 @@ export default function People() {
             >
                 {viewData.person && (
                     <>
-                        <h3 style={{ marginBottom: '16px', fontSize: '1.25rem', fontWeight: 600 }}>{viewData.person.name}</h3>
+                        <h3 style={{ marginBottom: '12px', fontSize: '1.15rem', fontWeight: 600 }}>{viewData.person.name}</h3>
 
-                        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '24px' }}>
+                        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '16px' }}>
                             <div className="kpi-card">
                                 <div className="kpi-label">Role</div>
                                 <div className="mt-sm"><Badge className={getRoleBadge(viewData.person.role)}>{viewData.person.role}</Badge></div>
                             </div>
                             <div className="kpi-card">
                                 <div className="kpi-label">Total Paid</div>
-                                <div className="kpi-value text-success" style={{ fontSize: '1.5rem' }}>{formatCurrency(viewData.totalPaid)}</div>
+                                <div className="kpi-value text-success" style={{ fontSize: '1.4rem' }}>{formatCurrency(viewData.totalPaid)}</div>
                             </div>
                             <div className="kpi-card">
                                 <div className="kpi-label">Pending</div>
-                                <div className="kpi-value text-warning" style={{ fontSize: '1.5rem' }}>{formatCurrency(viewData.totalPending)}</div>
+                                <div className="kpi-value text-warning" style={{ fontSize: '1.4rem' }}>{formatCurrency(viewData.totalPending)}</div>
                             </div>
                         </div>
 
-                        <div className="flex gap-lg mb-lg">
-                            <div>
-                                <span className="text-sm text-muted">Payment Type: </span>
-                                <span className="font-medium">{viewData.person.payment_type || '-'}</span>
-                            </div>
-                            <div>
-                                <span className="text-sm text-muted">Standard Rate: </span>
-                                <span className="font-medium">{viewData.person.standard_rate ? formatCurrency(viewData.person.standard_rate) : '-'}</span>
-                            </div>
-                            <div>
-                                <span className="text-sm text-muted">Status: </span>
-                                {viewData.person.is_active ? <span className="badge badge-success">Active</span> : <span className="badge badge-neutral">Inactive</span>}
-                            </div>
+                        <div className="flex gap-lg mb-md">
+                            <div><span className="text-sm text-muted">Payment Type: </span><span className="font-medium">{viewData.person.payment_type || '-'}</span></div>
+                            <div><span className="text-sm text-muted">Rate: </span><span className="font-medium">{viewData.person.standard_rate ? formatCurrency(viewData.person.standard_rate) : '-'}</span></div>
+                            <div><span className="text-sm text-muted">Status: </span>{viewData.person.is_active ? <span className="badge badge-success">Active</span> : <span className="badge badge-neutral">Inactive</span>}</div>
                         </div>
 
-                        <h4 style={{ marginBottom: '12px' }}>Projects Overview</h4>
-                        {viewData.projectsOverview && viewData.projectsOverview.length > 0 ? (
-                            <div className="table-container mb-lg">
-                                <table className="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Project</th>
-                                            <th className="text-right">Agreed</th>
-                                            <th className="text-right">Paid</th>
-                                            <th className="text-right">Remaining</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {viewData.projectsOverview.map(p => (
-                                            <tr key={p.id}>
-                                                <td className="font-medium">{p.name}</td>
-                                                <td className="text-right">{formatCurrency(p.agreed)}</td>
-                                                <td className="text-right text-success">{formatCurrency(p.paid)}</td>
-                                                <td className={`text-right ${p.remaining > 0 ? 'text-warning font-medium' : 'text-muted'}`}>
-                                                    {formatCurrency(p.remaining)}
-                                                </td>
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', gap: '4px', borderBottom: '2px solid var(--color-border)', marginBottom: '16px' }}>
+                            <button
+                                className={`btn btn-sm ${peopleViewTab === 'transactions' ? 'btn-primary' : 'btn-ghost'}`}
+                                style={{ borderRadius: '4px 4px 0 0' }}
+                                onClick={() => setPeopleViewTab('transactions')}>
+                                Payment History
+                            </button>
+                            <button
+                                className={`btn btn-sm ${peopleViewTab === 'projects' ? 'btn-primary' : 'btn-ghost'}`}
+                                style={{ borderRadius: '4px 4px 0 0' }}
+                                onClick={() => setPeopleViewTab('projects')}>
+                                Active Projects {viewData.projectsOverview?.length > 0 ? `(${viewData.projectsOverview.length})` : ''}
+                            </button>
+                        </div>
+
+                        {/* Payment History Tab */}
+                        {peopleViewTab === 'transactions' && (
+                            viewData.transactions && viewData.transactions.length > 0 ? (
+                                <div className="table-container">
+                                    <table className="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Type</th>
+                                                <th>Project</th>
+                                                <th>Status</th>
+                                                <th className="text-right">Amount</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <p className="text-muted mb-lg">No assigned projects yet.</p>
+                                        </thead>
+                                        <tbody>
+                                            {viewData.transactions.map(t => (
+                                                <tr key={t.id}>
+                                                    <td>{formatDateShort(t.date)}</td>
+                                                    <td><Badge className={getTypeBadge(t.type)}>{t.type}</Badge></td>
+                                                    <td>{t.projects?.project_name || '-'}</td>
+                                                    <td><Badge className={getStatusBadge(t.payment_status)}>{t.payment_status}</Badge></td>
+                                                    <td className="text-right font-medium">{formatCurrency(t.amount)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <p className="text-muted">No payment history</p>
+                            )
                         )}
 
-                        <h4 style={{ marginBottom: '12px' }}>Payment History</h4>
-                        {viewData.transactions && viewData.transactions.length > 0 ? (
-                            <div className="table-container">
-                                <table className="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Project</th>
-                                            <th>Status</th>
-                                            <th className="text-right">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {viewData.transactions.map(t => (
-                                            <tr key={t.id}>
-                                                <td>{formatDateShort(t.date)}</td>
-                                                <td><Badge className={getTypeBadge(t.type)}>{t.type}</Badge></td>
-                                                <td>{t.projects?.project_name || '-'}</td>
-                                                <td><Badge className={getStatusBadge(t.payment_status)}>{t.payment_status}</Badge></td>
-                                                <td className="text-right font-medium">{formatCurrency(t.amount)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <p className="text-muted">No payment history</p>
-                        )}
+                        {/* Active Projects Tab */}
+                        {peopleViewTab === 'projects' && (() => {
+                            const projects = viewData.projectsOverview || [];
+                            const totalDevOwed = projects.reduce((s, p) => s + p.devRemaining, 0);
+                            return projects.length === 0 ? (
+                                <p className="text-muted">No assigned projects.</p>
+                            ) : (
+                                <>
+                                    {/* Accounts payable summary */}
+                                    {totalDevOwed > 0 && (
+                                        <div style={{ background: 'rgba(211,47,47,0.07)', border: '1px solid rgba(211,47,47,0.2)', borderRadius: '6px', padding: '10px 14px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span className="text-sm font-medium">Total Accounts Payable (Dev)</span>
+                                            <span className="font-semibold" style={{ color: 'var(--color-error)' }}>{formatCurrency(totalDevOwed)}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Per-project cards */}
+                                    {projects.map(proj => (
+                                        <div key={proj.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '14px', marginBottom: '14px' }}>
+                                            {/* Header */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                                <div>
+                                                    <div className="font-semibold">{proj.name}</div>
+                                                    <div className="text-sm text-muted">{proj.clientName}</div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                                    {/* Client payment status badge */}
+                                                    {proj.clientAgreed > 0 ? (
+                                                        proj.clientOwed <= 0
+                                                            ? <span className="badge badge-success">Client Paid ✓</span>
+                                                            : <span className="badge badge-warning">Client Owes {formatCurrency(proj.clientOwed)}</span>
+                                                    ) : (
+                                                        <span className="badge badge-neutral">No Client Amount Set</span>
+                                                    )}
+                                                    {proj.status && <Badge className={getStatusBadge(proj.status)}>{proj.status}</Badge>}
+                                                </div>
+                                            </div>
+
+                                            {/* Dev payment grid */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '10px' }}>
+                                                <div style={{ background: 'var(--color-bg-secondary)', borderRadius: '6px', padding: '8px 12px' }}>
+                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Dev Agreed</div>
+                                                    <div className="font-semibold">{formatCurrency(proj.devAgreed)}</div>
+                                                </div>
+                                                <div style={{ background: 'var(--color-bg-secondary)', borderRadius: '6px', padding: '8px 12px' }}>
+                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Dev Paid</div>
+                                                    <div className="font-semibold text-success">{formatCurrency(proj.devPaid)}</div>
+                                                </div>
+                                                <div style={{ background: proj.devRemaining > 0 ? 'rgba(255,152,0,0.08)' : 'var(--color-bg-secondary)', borderRadius: '6px', padding: '8px 12px' }}>
+                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Dev Remaining</div>
+                                                    <div className={`font-semibold ${proj.devRemaining > 0 ? 'text-warning' : 'text-muted'}`}>
+                                                        {proj.devRemaining > 0 ? formatCurrency(proj.devRemaining) : '✓ Settled'}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Progress bar */}
+                                            {proj.devAgreed > 0 && (
+                                                <div style={{ marginBottom: '10px' }}>
+                                                    <div style={{ background: 'var(--color-bg-tertiary)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                                                        <div style={{ width: `${Math.min(100, (proj.devPaid / proj.devAgreed) * 100)}%`, height: '100%', background: proj.devRemaining <= 0 ? 'var(--color-success)' : 'var(--color-warning)', borderRadius: '4px', transition: 'width 0.3s' }} />
+                                                    </div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px' }}>
+                                                        {((proj.devPaid / proj.devAgreed) * 100).toFixed(0)}% paid to dev
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Client amounts comparison note */}
+                                            {proj.clientAgreed > 0 && (
+                                                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '8px', padding: '6px 10px', background: 'var(--color-bg-secondary)', borderRadius: '4px' }}>
+                                                    Client: {formatCurrency(proj.clientAgreed)} agreed — {formatCurrency(proj.clientReceived)} received
+                                                    {proj.clientAgreed !== proj.devAgreed && (
+                                                        <span style={{ marginLeft: '8px', color: 'var(--color-accent)', fontWeight: 600 }}>
+                                                            Margin: {formatCurrency(proj.clientAgreed - proj.devAgreed)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Linked transactions */}
+                                            {proj.projectTransactions && proj.projectTransactions.length > 0 && (
+                                                <details style={{ marginTop: '6px' }}>
+                                                    <summary style={{ fontSize: '12px', color: 'var(--color-text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+                                                        {proj.projectTransactions.length} linked transaction{proj.projectTransactions.length !== 1 ? 's' : ''}
+                                                    </summary>
+                                                    <div className="table-container" style={{ marginTop: '8px' }}>
+                                                        <table className="table" style={{ fontSize: '12px' }}>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th>Type</th>
+                                                                    <th>Status</th>
+                                                                    <th className="text-right">Amount</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {proj.projectTransactions.map(t => (
+                                                                    <tr key={t.id}>
+                                                                        <td>{formatDateShort(t.date)}</td>
+                                                                        <td><Badge className={getTypeBadge(t.type)}>{t.type}</Badge></td>
+                                                                        <td><Badge className={getStatusBadge(t.payment_status)}>{t.payment_status}</Badge></td>
+                                                                        <td className={`text-right font-medium ${t.type === 'Revenue' ? 'text-success' : ''}`}>{formatCurrency(t.amount)}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </details>
+                                            )}
+                                        </div>
+                                    ))}
+                                </>
+                            );
+                        })()}
                     </>
                 )}
             </Modal>
